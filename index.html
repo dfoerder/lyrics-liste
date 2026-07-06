@@ -168,6 +168,70 @@ function cleanLyrics(text){
     .trim();
 }
 
+function safeFilename(name){
+  const base = (name||'liste').normalize('NFKD')
+    .replace(/[^A-Za-z0-9\-_ ]+/g,'').trim().replace(/\s+/g,'-');
+  return (base || 'liste') + '.json';
+}
+
+function buildExportPayload(list, songs){
+  const exportSongs = {};
+  list.songIds.forEach(id=>{ if(songs[id]) exportSongs[id] = songs[id]; });
+  return {
+    type: 'lyrics-liste-list',
+    version: 1,
+    list: {id: list.id, name: list.name, songIds: list.songIds.filter(id=>exportSongs[id])},
+    songs: exportSongs
+  };
+}
+
+async function shareOrDownloadJSON(filename, dataObj){
+  const json = JSON.stringify(dataObj, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  if(navigator.canShare){
+    try{
+      const file = new File([blob], filename, {type:'application/json'});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title: dataObj.list ? dataObj.list.name : filename});
+        return;
+      }
+    }catch(e){
+      if(e && e.name==='AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+function readFileAsText(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(reader.result);
+    reader.onerror = ()=>reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+function parseImportPayload(text){
+  let data;
+  try{ data = JSON.parse(text); }
+  catch(e){ throw new Error('Datei ist kein gültiges JSON.'); }
+  if(!data || data.type!=='lyrics-liste-list' || !data.list || !data.list.id || !data.list.name
+    || !Array.isArray(data.list.songIds) || !data.songs || typeof data.songs!=='object'){
+    throw new Error('Datei hat kein gültiges Lyrics-Liste-Format.');
+  }
+  const songs = {};
+  data.list.songIds.forEach(id=>{
+    const s = data.songs[id];
+    if(s && s.id===id && s.title) songs[id] = s;
+  });
+  const list = {id: data.list.id, name: String(data.list.name), songIds: data.list.songIds.filter(id=>songs[id])};
+  return {list, songs};
+}
+
 function Confirm({title, message, confirmLabel, danger, onConfirm, onCancel}){
   return (
     <div className="overlay" onClick={onCancel}>
@@ -220,11 +284,16 @@ function Header({title, onBack, right}){
   );
 }
 
-function HomeView({lists, onOpenList, onCreateList}){
+function HomeView({lists, onOpenList, onCreateList, onImportFile}){
   const [showPrompt,setShowPrompt] = useState(false);
+  const fileRef = useRef(null);
   return (
     <React.Fragment>
-      <Header title="Lyrics-Listen" />
+      <Header title="Lyrics-Listen" right={
+        <button className="icon-btn" title="Liste importieren" onClick={()=>fileRef.current && fileRef.current.click()}>&#128229;</button>
+      } />
+      <input ref={fileRef} type="file" accept="application/json,.json" style={{display:'none'}}
+        onChange={e=>{ const f=e.target.files[0]; if(f) onImportFile(f); e.target.value=''; }} />
       <div className="main">
         {lists.length===0 &&
           <div className="empty">Noch keine Liste angelegt.<br/>Erstelle eine Liste für deine Gruppe, z.B. „Hauskreis" oder „Jugendabend".</div>}
@@ -280,17 +349,20 @@ function SongPicker({songs, excludeIds, onPick, onCreateNew, onCancel}){
   );
 }
 
-function ListView({list, songs, onBack, onRename, onDelete, onAddExisting, onCreateSong, onRemoveSong, onReorder, onOpenSong, onPrint}){
+function ListView({list, songs, onBack, onRename, onDelete, onAddExisting, onCreateSong, onRemoveSong, onOpenSong, onPrint, onExport}){
   const [showPicker,setShowPicker] = useState(false);
   const [showRename,setShowRename] = useState(false);
   const [showDelete,setShowDelete] = useState(false);
-  const orderedSongs = list.songIds.map(id=>songs[id]).filter(Boolean);
+  const [showExport,setShowExport] = useState(false);
+  const orderedSongs = list.songIds.map(id=>songs[id]).filter(Boolean)
+    .sort((a,b)=>a.title.localeCompare(b.title,'de'));
 
   return (
     <React.Fragment>
       <Header title={list.name} onBack={onBack}
         right={
           <div style={{display:'flex',gap:'.2rem'}} className="no-print">
+            <button className="icon-btn" title="Liste teilen / exportieren" onClick={()=>setShowExport(true)}>&#128228;</button>
             <button className="icon-btn" title="Umbenennen" onClick={()=>setShowRename(true)}>&#9998;</button>
             <button className="icon-btn" title="Löschen" onClick={()=>setShowDelete(true)}>&#128465;</button>
           </div>
@@ -303,10 +375,8 @@ function ListView({list, songs, onBack, onRename, onDelete, onAddExisting, onCre
         {orderedSongs.length===0 &&
           <div className="empty">Diese Liste hat noch keine Songs.<br/>Füge Songtexte hinzu, die du schon irgendwo hast.</div>}
         <ul className="song-list">
-          {orderedSongs.map((s,i)=>(
+          {orderedSongs.map(s=>(
             <li className="song-item" key={s.id}>
-              <button className="reorder-btn" disabled={i===0} onClick={()=>onReorder(i,i-1)}>&#8593;</button>
-              <button className="reorder-btn" disabled={i===orderedSongs.length-1} onClick={()=>onReorder(i,i+1)}>&#8595;</button>
               <div className="title" onClick={()=>onOpenSong(s.id)}>
                 {s.title}{s.artist ? <span className="artist"> — {s.artist}</span> : null}
               </div>
@@ -326,6 +396,11 @@ function ListView({list, songs, onBack, onRename, onDelete, onAddExisting, onCre
         confirmLabel="Löschen" danger
         onConfirm={()=>{ setShowDelete(false); onDelete(); }}
         onCancel={()=>setShowDelete(false)} />}
+      {showExport && <Confirm title="Liste teilen"
+        message={`„${list.name}" mit ${orderedSongs.length} Songtext${orderedSongs.length===1?'':'en'} wird als Datei geteilt. Bitte nur an Personen weitergeben, für die eure Lizenz (z.B. CCLI) gilt.`}
+        confirmLabel="Teilen"
+        onConfirm={()=>{ setShowExport(false); onExport(); }}
+        onCancel={()=>setShowExport(false)} />}
     </React.Fragment>
   );
 }
@@ -459,7 +534,8 @@ function SongView({song, usedInOtherLists, onBack, onEdit, onDelete}){
 }
 
 function PrintView({list, songs, onBack}){
-  const orderedSongs = list.songIds.map(id=>songs[id]).filter(Boolean);
+  const orderedSongs = list.songIds.map(id=>songs[id]).filter(Boolean)
+    .sort((a,b)=>a.title.localeCompare(b.title,'de'));
   return (
     <React.Fragment>
       <div className="header no-print">
@@ -489,6 +565,8 @@ function App(){
   const [activeListId,setActiveListId] = useState(null);
   const [activeSongId,setActiveSongId] = useState(null);
   const [editingNewSong,setEditingNewSong] = useState(false);
+  const [pendingImport,setPendingImport] = useState(null);
+  const [importError,setImportError] = useState('');
 
   useEffect(()=>{ localStorage.setItem(LS_LISTS, JSON.stringify(lists)); },[lists]);
   useEffect(()=>{ localStorage.setItem(LS_SONGS, JSON.stringify(songs)); },[songs]);
@@ -516,15 +594,6 @@ function App(){
   function removeSongFromList(songId){
     setLists(prev=>prev.map(l=>l.id===activeListId?{...l,songIds:l.songIds.filter(id=>id!==songId)}:l));
   }
-  function reorderSong(from,to){
-    setLists(prev=>prev.map(l=>{
-      if(l.id!==activeListId) return l;
-      const arr = [...l.songIds];
-      const [moved] = arr.splice(from,1);
-      arr.splice(to,0,moved);
-      return {...l, songIds:arr};
-    }));
-  }
   function saveNewSong(data){
     const s = {id:uid(), ...data};
     setSongs(prev=>({...prev, [s.id]: s}));
@@ -546,43 +615,88 @@ function App(){
   function countOtherUsages(songId){
     return lists.filter(l=>l.songIds.includes(songId)).length - (activeList && activeList.songIds.includes(songId) ? 1 : 0);
   }
-
-  if(phase==='home'){
-    return <HomeView lists={lists}
-      onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
-      onCreateList={createList} />;
+  function exportList(){
+    if(!activeList) return;
+    shareOrDownloadJSON(safeFilename(activeList.name), buildExportPayload(activeList, songs));
   }
-  if(phase==='list' && activeList){
-    return <ListView list={activeList} songs={songs}
+  async function handleImportFile(file){
+    try{
+      const text = await readFileAsText(file);
+      setPendingImport(parseImportPayload(text));
+    }catch(e){
+      setImportError(e.message || 'Import fehlgeschlagen.');
+    }
+  }
+  function confirmImport(){
+    const payload = pendingImport;
+    setSongs(prev=>({...prev, ...payload.songs}));
+    setLists(prev=>{
+      const idx = prev.findIndex(l=>l.id===payload.list.id);
+      if(idx>=0){ const next=[...prev]; next[idx]=payload.list; return next; }
+      return [...prev, payload.list];
+    });
+    setPendingImport(null);
+    setActiveListId(payload.list.id);
+    setPhase('list');
+  }
+
+  let view;
+  if(phase==='home'){
+    view = <HomeView lists={lists}
+      onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
+      onCreateList={createList}
+      onImportFile={handleImportFile} />;
+  }
+  else if(phase==='list' && activeList){
+    view = <ListView list={activeList} songs={songs}
       onBack={()=>{ setActiveListId(null); setPhase('home'); }}
       onRename={renameList} onDelete={deleteList}
       onAddExisting={addExistingSong}
       onCreateSong={()=>{ setEditingNewSong(true); setPhase('newsong'); }}
       onRemoveSong={removeSongFromList}
-      onReorder={reorderSong}
       onOpenSong={id=>{ setActiveSongId(id); setPhase('song'); }}
-      onPrint={()=>setPhase('print')} />;
+      onPrint={()=>setPhase('print')}
+      onExport={exportList} />;
   }
-  if(phase==='newsong'){
-    return <SongEditor song={{}}
+  else if(phase==='newsong'){
+    view = <SongEditor song={{}}
       onSave={saveNewSong}
       onCancel={()=>{ setEditingNewSong(false); setPhase('list'); }} />;
   }
-  if(phase==='song' && activeSong){
-    return <SongView song={activeSong} usedInOtherLists={countOtherUsages(activeSongId)}
+  else if(phase==='song' && activeSong){
+    view = <SongView song={activeSong} usedInOtherLists={countOtherUsages(activeSongId)}
       onBack={()=>{ setActiveSongId(null); setPhase('list'); }}
       onEdit={()=>setPhase('editsong')}
       onDelete={deleteSong} />;
   }
-  if(phase==='editsong' && activeSong){
-    return <SongEditor song={activeSong}
+  else if(phase==='editsong' && activeSong){
+    view = <SongEditor song={activeSong}
       onSave={saveEditedSong}
       onCancel={()=>setPhase('song')} />;
   }
-  if(phase==='print' && activeList){
-    return <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')} />;
+  else if(phase==='print' && activeList){
+    view = <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')} />;
   }
-  return <HomeView lists={lists} onOpenList={id=>{ setActiveListId(id); setPhase('list'); }} onCreateList={createList} />;
+  else {
+    view = <HomeView lists={lists} onOpenList={id=>{ setActiveListId(id); setPhase('list'); }} onCreateList={createList} onImportFile={handleImportFile} />;
+  }
+
+  return (
+    <React.Fragment>
+      {view}
+      {pendingImport && <Confirm title="Liste importieren?"
+        message={lists.some(l=>l.id===pendingImport.list.id)
+          ? `„${pendingImport.list.name}" (${pendingImport.list.songIds.length} Songs) aktualisiert die bereits vorhandene Liste gleichen Ursprungs.`
+          : `„${pendingImport.list.name}" mit ${pendingImport.list.songIds.length} Song${pendingImport.list.songIds.length===1?'':'s'} importieren?`}
+        confirmLabel="Importieren"
+        onConfirm={confirmImport}
+        onCancel={()=>setPendingImport(null)} />}
+      {importError && <Confirm title="Import fehlgeschlagen" message={importError}
+        confirmLabel="OK"
+        onConfirm={()=>setImportError('')}
+        onCancel={()=>setImportError('')} />}
+    </React.Fragment>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
