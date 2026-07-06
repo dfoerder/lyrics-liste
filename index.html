@@ -90,6 +90,23 @@ input:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-
 .picker-item:hover{background:var(--accent-bg)}
 .picker-item .artist{font-size:.78rem;color:var(--muted)}
 
+.search-box{background:var(--accent-bg);border:1px solid var(--border);border-radius:.7rem;padding:.8rem .85rem;margin-bottom:1rem}
+.search-box label{display:block;font-size:.8rem;color:var(--accent-dark);font-weight:600;margin-bottom:.4rem}
+.search-box input{width:100%;padding:.6rem .7rem;border:1px solid var(--border2);border-radius:.5rem;background:var(--bg-card)}
+.search-hint{font-size:.78rem;color:var(--muted);margin-top:.45rem}
+.search-hint.err{color:var(--danger)}
+.search-hint.ok{color:var(--accent-dark)}
+.search-results{margin-top:.55rem;border:1px solid var(--border);border-radius:.5rem;background:var(--bg-card);max-height:15rem;overflow-y:auto}
+.search-result{padding:.55rem .7rem;border-bottom:1px solid var(--border);cursor:pointer}
+.search-result:last-child{border-bottom:none}
+.search-result:hover{background:var(--accent-bg)}
+.sr-title{font-weight:600;font-size:.92rem}
+.sr-sub{font-size:.76rem;color:var(--muted);margin-top:.1rem}
+.btn-sm{padding:.4rem .7rem;font-size:.82rem}
+.hint-inline{font-size:.76rem;color:var(--muted);margin-left:.55rem}
+.lyrics-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;margin-bottom:.45rem}
+.copyright-note{font-size:.75rem;color:var(--muted);line-height:1.45;margin-top:.5rem;padding-top:.5rem;border-top:1px dashed var(--border2)}
+
 @media print{
   .header,.fab,.toolbar,.reorder-btn,.no-print{display:none!important}
   .main{max-width:none;padding:0}
@@ -113,6 +130,32 @@ function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toStrin
 function loadJSON(key, fallback){
   try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
   catch(e){ return fallback; }
+}
+
+async function searchSongs(term){
+  const url = 'https://itunes.apple.com/search?entity=song&limit=10&term=' + encodeURIComponent(term);
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('search failed');
+  const data = await res.json();
+  const seen = new Set();
+  const out = [];
+  for(const r of (data.results||[])){
+    if(!r.trackName || !r.artistName) continue;
+    const key = (r.trackName+'|'+r.artistName).toLowerCase();
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      title: r.trackName,
+      artist: r.artistName,
+      year: (r.releaseDate||'').slice(0,4),
+      album: r.collectionName || ''
+    });
+  }
+  return out;
+}
+
+function geniusSearchUrl(title, artist){
+  return 'https://genius.com/search?q=' + encodeURIComponent((title+' '+(artist||'')).trim());
 }
 
 function cleanLyrics(text){
@@ -292,13 +335,72 @@ function SongEditor({song, onSave, onCancel}){
   const [artist,setArtist] = useState(song.artist||'');
   const [lyrics,setLyrics] = useState(song.lyrics||'');
 
+  const [query,setQuery] = useState('');
+  const [results,setResults] = useState([]);
+  const [searching,setSearching] = useState(false);
+  const [searchErr,setSearchErr] = useState('');
+  const [pickedMsg,setPickedMsg] = useState('');
+  const timerRef = useRef(null);
+
+  useEffect(()=>{
+    const term = query.trim();
+    if(term.length < 2){ setResults([]); setSearching(false); setSearchErr(''); return; }
+    setSearching(true); setSearchErr('');
+    clearTimeout(timerRef.current);
+    let cancelled = false;
+    timerRef.current = setTimeout(async ()=>{
+      try{
+        const r = await searchSongs(term);
+        if(cancelled) return;
+        setResults(r);
+        if(r.length===0) setSearchErr('Keine Treffer.');
+      }catch(e){
+        if(cancelled) return;
+        setSearchErr('Suche nicht möglich (offline?). Titel & Autor manuell eintragen.');
+        setResults([]);
+      }finally{
+        if(!cancelled) setSearching(false);
+      }
+    }, 400);
+    return ()=>{ cancelled = true; clearTimeout(timerRef.current); };
+  },[query]);
+
+  function pick(r){
+    setTitle(r.title);
+    setArtist(r.artist);
+    setResults([]);
+    setQuery('');
+    setSearchErr('');
+    setPickedMsg('Titel & Autor übernommen. Text unten einfügen.');
+  }
+
+  const canSearchLyrics = title.trim().length>0;
+
   return (
     <React.Fragment>
       <Header title={song.id ? 'Song bearbeiten' : 'Neuer Song'} onBack={onCancel} />
       <div className="main">
+        <div className="search-box no-print">
+          <label>Song suchen — füllt Titel &amp; Autor automatisch</label>
+          <input value={query} onChange={e=>{ setQuery(e.target.value); setPickedMsg(''); }}
+            placeholder="z.B. Oceans Hillsong" autoFocus={!song.id} />
+          {searching && <div className="search-hint">Suche…</div>}
+          {!searching && searchErr && <div className="search-hint err">{searchErr}</div>}
+          {!searching && pickedMsg && <div className="search-hint ok">{pickedMsg}</div>}
+          {results.length>0 &&
+            <div className="search-results">
+              {results.map((r,i)=>(
+                <div className="search-result" key={i} onClick={()=>pick(r)}>
+                  <div className="sr-title">{r.title}</div>
+                  <div className="sr-sub">{r.artist}{r.year?' · '+r.year:''}{r.album?' · '+r.album:''}</div>
+                </div>
+              ))}
+            </div>}
+        </div>
+
         <div className="field">
           <label>Titel</label>
-          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Songtitel" autoFocus />
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Songtitel" />
         </div>
         <div className="field">
           <label>Künstler / Autor (optional)</label>
@@ -306,7 +408,13 @@ function SongEditor({song, onSave, onCancel}){
         </div>
         <div className="field">
           <label>Songtext</label>
+          <div className="lyrics-actions no-print">
+            <button className="btn btn-secondary btn-sm" disabled={!canSearchLyrics}
+              onClick={()=>window.open(geniusSearchUrl(title,artist),'_blank','noopener')}>Text online suchen ↗</button>
+            <span className="hint-inline">Öffnet Genius im neuen Tab — Text kopieren und hier einfügen.</span>
+          </div>
           <textarea value={lyrics} onChange={e=>setLyrics(e.target.value)} placeholder="Text hier einfügen…" />
+          <div className="copyright-note">Nur Lieder einfügen, für die eure Gruppe die Rechte bzw. eine Lizenz (z.B. CCLI) hat. Die App speichert Texte nur lokal auf diesem Gerät.</div>
         </div>
         <div className="toolbar">
           <button className="btn btn-secondary" onClick={()=>setLyrics(cleanLyrics(lyrics))}>Text bereinigen</button>
