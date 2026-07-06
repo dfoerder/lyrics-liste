@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "lyrics-liste",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8322", "--directory", "/Users/dfoerd/Documents/projekte/lyrics-liste"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "serve", "-l", "8322", "/Users/dfoerd/Documents/projekte/lyrics-liste"],
       "port": 8322
     }
   ]
