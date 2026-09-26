@@ -23,7 +23,6 @@
   --accent:#2a6a7a;--accent-dark:#1e4f5c;--accent-bg:rgba(42,106,122,0.08);
   --danger:#b3402a;--danger-bg:rgba(179,64,42,0.08);
   --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-  --mono:'SF Mono',Menlo,Consolas,monospace;
   --shadow:0 1px 3px rgba(0,0,0,0.08);
 }
 html,body{height:100%}
@@ -66,7 +65,11 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .song-item .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .song-item .artist{font-size:.78rem;color:var(--muted)}
 
-.lyrics-view{white-space:pre-wrap;font-family:var(--mono);font-size:1rem;line-height:1.7;padding:.2rem 0}
+.lyrics-view{font-size:1.08rem;line-height:1.55;padding:.2rem 0}
+.lyrics-line{padding-left:1em;text-indent:-1em}
+.lyrics-gap{height:.9em}
+.lyrics-label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:.1rem}
+.lyrics-empty{color:var(--muted)}
 .song-meta{margin-bottom:1rem}
 .song-meta h2{font-size:1.3rem;margin-bottom:.15rem}
 .song-meta .artist{color:var(--muted);font-size:.9rem}
@@ -87,6 +90,7 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
   .song-print:last-child{page-break-after:auto}
   body{background:#fff}
   .lyrics-view{font-size:13pt}
+  .lyrics-label{font-size:9pt;color:#555}
 }
 </style>
 </head>
@@ -280,13 +284,28 @@ function SongMeta({song}){
   );
 }
 
+const SECTION_LABEL = /^(strophe|vers|verse|refrain|chorus|pre-?chorus|bridge|intro|outro|tag|ende|schluss|coda|zwischenteil|interlude)(\s*\d+)?(\s*\([^)]*\))?\s*:?$/i;
+
+function Lyrics({text}){
+  if(!text) return <div className="lyrics-view lyrics-empty">(kein Text hinterlegt)</div>;
+  return (
+    <div className="lyrics-view">
+      {text.split('\n').map((line,i)=>
+        !line.trim() ? <div className="lyrics-gap" key={i} />
+        : SECTION_LABEL.test(line.trim()) ? <div className="lyrics-label" key={i}>{line.trim().replace(/:$/,'')}</div>
+        : <div className="lyrics-line" key={i}>{line}</div>
+      )}
+    </div>
+  );
+}
+
 function SongView({song, onBack}){
   return (
     <React.Fragment>
       <Header title={song.title} onBack={onBack} />
       <div className="main">
         <SongMeta song={song} />
-        <div className="lyrics-view">{song.lyrics || '(kein Text hinterlegt)'}</div>
+        <Lyrics text={song.lyrics} />
       </div>
     </React.Fragment>
   );
@@ -305,7 +324,7 @@ function PrintView({list, songs, onBack}){
         {orderedSongs.map(s=>(
           <div className="song-print" key={s.id}>
             <SongMeta song={s} />
-            <div className="lyrics-view">{s.lyrics}</div>
+            <Lyrics text={s.lyrics} />
           </div>
         ))}
       </div>
