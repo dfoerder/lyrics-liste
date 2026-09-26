@@ -4,13 +4,15 @@ Hinweise für Claude Code (claude.ai/code) zur Arbeit in diesem Repository.
 
 ## Projekt
 
-**Lyrics-Liste** — eine PWA zum Verwalten von Songtext-Listen für gemeinsames Singen
-(z.B. Hauskreis, Jugendabend, Worship-Gruppen). Ersetzt die bisher ausgedruckte
-Lyrics-Sammlung christlicher Worship-Lieder.
+**Lyrics-Liste** — eine PWA zum Anzeigen und Drucken von Liedtexten für die
+Familienandachten einer Familie (privater Gebrauch).
 
-Kernidee: Für verschiedene Gruppen lassen sich eigene Listen führen. Songs (Titel,
-Autor/Künstler, Text) werden einmal in der Sammlung angelegt und können in mehreren
-Listen verwendet werden. Anzeige und Druck für den gemeinsamen Gebrauch.
+Kernidee: Die App ist **ein reiner Viewer und beim Aufruf leer**. Lieder kommen
+ausschließlich über eine Import-Datei, die der Besitzer auf seinem Mac mit einem
+Claude-Prompt erstellt (Vorlage: `lieder-prompt.md`) und an die Familie schickt.
+Ein Import **ersetzt** alle vorhandenen Daten. In der App gibt es kein Anlegen,
+Bearbeiten, Online-Suchen oder Teilen/Exportieren von Liedern — bewusst so, aus
+rechtlichen Gründen. Solche Funktionen nicht wieder einbauen.
 
 ## Architektur
 
@@ -24,27 +26,31 @@ Babel-Standalone über CDN, kein Build-Schritt, kein npm).
   `sw.js` anpassen und `CACHE` hochzählen (`lyrics-liste-v2`, …).
 - `manifest.webmanifest` + `icons/` — Installierbarkeit (Homescreen)
 
+**Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
+`{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
+performer, year, lyrics}]}` — `lists` optional. Format-Spezifikation für Claude
+steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
+
 **Daten:**
-- `localStorage` — Nutzerstand:
-  - `lyrics-lists` — Array der Listen: `[{id, name, songIds:[...]}]`
-  - `lyrics-songs` — Map der Songs: `{ [id]: {id, title, artist, lyrics} }`
+- `localStorage` `lyrics-sammlung` — die zuletzt importierte Sammlung:
+  `{created, importedAt, lists:[...], songs:{ [id]: {...} }}`
+- Alte Schlüssel `lyrics-lists` / `lyrics-songs` (v1) werden beim Import bzw.
+  beim Entfernen gelöscht.
 
 **React-Komponenten (in index.html):**
-- `App` — Haupt-Component, verwaltet `phase` (`home`, `list`, `newsong`, `song`,
-  `editsong`, `print`), `lists`, `songs`
-- `HomeView` — Übersicht aller Listen
-- `ListView` — eine Liste mit ihren Songs (hinzufügen, sortieren, entfernen)
-- `SongPicker` — vorhandenen Song suchen und in Liste aufnehmen
-- `SongEditor` — Song anlegen/bearbeiten (Titel, Autor, Text; „Text bereinigen")
-- `SongView` — Songtext-Ansicht
+- `App` — verwaltet `phase` (`home`, `list`, `song`, `print`), `collection`, Import
+- `HomeView` — „Alle Lieder" + Listen, Import-Button, alles entfernen, Stand-Datum
+- `ListView` — Lieder einer Liste (alphabetisch), nur lesen
+- `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter
 - `PrintView` — Druckansicht der ganzen Liste
 
 ## Copyright / CCLI
 
 Songtexte christlicher Lieder sind urheberrechtlich geschützt. Die App liefert bewusst
-**keine Texte mit** — Nutzer fügen nur Lieder ein, für die ihre Gemeinde/Gruppe die
-Rechte bzw. eine CCLI-Sammellizenz hat. Bei Features, die Texte aus dem Netz beziehen,
-diesen Aspekt beachten und nicht ungefragt geschützte Volltexte einbetten/veröffentlichen.
+**keine Texte mit** und ist öffentlich (GitHub Pages) nur als leere Hülle erreichbar.
+Texte liegen nur im Browser-Speicher der Familiengeräte. Keine Songtexte ins Repo
+committen (auch nicht als Beispiel- oder Testdaten) und keine Features bauen, die
+Texte aus dem Netz beziehen, veröffentlichen oder aus der App heraus weitergeben.
 
 ## Testen
 
@@ -59,4 +65,4 @@ Dann `http://localhost:8322` aufrufen.
 ## Keine Browser-Dialoge
 
 Nie `alert()`, `confirm()`, `prompt()` verwenden — immer Custom-Dialoge mit
-Ja/Nein-Buttons (siehe `Confirm` und `PromptDialog` in `index.html`).
+Ja/Nein-Buttons (siehe `Confirm` in `index.html`).

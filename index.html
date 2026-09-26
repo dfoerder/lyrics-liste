@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="robots" content="noindex, nofollow"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="Lyrics-Liste"/>
@@ -29,8 +30,7 @@ html,body{height:100%}
 body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
 #root{min-height:100vh;display:flex;flex-direction:column}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
-input,textarea{font-family:inherit;font-size:inherit;color:inherit}
-input:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-offset:1px}
+button:focus{outline:2px solid var(--accent);outline-offset:1px}
 
 .header{display:flex;align-items:center;gap:.6rem;padding:.8rem 1rem;background:var(--bg-card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
 .header h1{font-size:1.05rem;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -44,11 +44,13 @@ input:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-
 .card-row .title{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .card-row .sub{font-size:.8rem;color:var(--muted)}
 .chev{color:var(--muted);font-size:1rem}
-
-.fab{position:fixed;bottom:1.4rem;right:1.4rem;width:3.4rem;height:3.4rem;border-radius:50%;background:var(--accent);color:#fff;font-size:1.6rem;box-shadow:0 3px 10px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;z-index:20}
-.fab:hover{background:var(--accent-dark)}
+.card-all{border-color:var(--border2)}
+.card-all .title{color:var(--accent-dark)}
+.section-label{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:1.2rem 0 .5rem .2rem}
 
 .empty{text-align:center;color:var(--muted);padding:3rem 1rem;font-size:.95rem;line-height:1.5}
+.empty .btn{margin-top:1.2rem}
+.stand{text-align:center;font-size:.76rem;color:var(--muted);margin-top:1.4rem}
 
 .btn{padding:.55rem 1rem;border-radius:.5rem;font-weight:600;font-size:.9rem}
 .btn-primary{background:var(--accent);color:#fff}
@@ -57,26 +59,18 @@ input:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-
 .btn-secondary:hover{background:var(--accent-bg)}
 .btn-danger{background:var(--danger-bg);color:var(--danger)}
 .btn-danger:hover{background:rgba(179,64,42,0.16)}
-.btn-block{width:100%}
-
-.field{margin-bottom:.9rem}
-.field label{display:block;font-size:.8rem;color:var(--text2);font-weight:600;margin-bottom:.3rem}
-.field input,.field textarea{width:100%;padding:.6rem .7rem;border:1px solid var(--border2);border-radius:.5rem;background:var(--bg-card)}
-.field textarea{font-family:var(--mono);font-size:.92rem;line-height:1.5;min-height:16rem;resize:vertical;white-space:pre-wrap}
 
 .song-list{list-style:none}
-.song-item{display:flex;align-items:center;gap:.5rem;background:var(--bg-card);border:1px solid var(--border);border-radius:.6rem;padding:.6rem .7rem;margin-bottom:.5rem}
-.song-item .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;font-weight:500}
+.song-item{display:flex;align-items:center;gap:.5rem;background:var(--bg-card);border:1px solid var(--border);border-radius:.6rem;padding:.65rem .8rem;margin-bottom:.5rem;cursor:pointer}
+.song-item:hover{background:var(--accent-bg)}
+.song-item .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
 .song-item .artist{font-size:.78rem;color:var(--muted)}
-.reorder-btn{width:1.8rem;height:1.8rem;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:.4rem}
-.reorder-btn:hover{background:var(--accent-bg);color:var(--accent)}
-.reorder-btn:disabled{opacity:.25;cursor:default}
-.reorder-btn:disabled:hover{background:none}
 
 .lyrics-view{white-space:pre-wrap;font-family:var(--mono);font-size:1rem;line-height:1.7;padding:.2rem 0}
 .song-meta{margin-bottom:1rem}
 .song-meta h2{font-size:1.3rem;margin-bottom:.15rem}
 .song-meta .artist{color:var(--muted);font-size:.9rem}
+.song-meta .writers{color:var(--muted);font-size:.8rem;margin-top:.15rem}
 
 .toolbar{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap}
 
@@ -86,32 +80,8 @@ input:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-
 .dialog p{color:var(--text2);font-size:.92rem;line-height:1.5;margin-bottom:1rem}
 .dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}
 
-.picker-search{margin-bottom:.7rem}
-.picker-list{max-height:16rem;overflow-y:auto;border:1px solid var(--border);border-radius:.5rem}
-.picker-item{padding:.65rem .8rem;border-bottom:1px solid var(--border);cursor:pointer}
-.picker-item:last-child{border-bottom:none}
-.picker-item:hover{background:var(--accent-bg)}
-.picker-item .artist{font-size:.78rem;color:var(--muted)}
-
-.search-box{background:var(--accent-bg);border:1px solid var(--border);border-radius:.7rem;padding:.8rem .85rem;margin-bottom:1rem}
-.search-box label{display:block;font-size:.8rem;color:var(--accent-dark);font-weight:600;margin-bottom:.4rem}
-.search-box input{width:100%;padding:.6rem .7rem;border:1px solid var(--border2);border-radius:.5rem;background:var(--bg-card)}
-.search-hint{font-size:.78rem;color:var(--muted);margin-top:.45rem}
-.search-hint.err{color:var(--danger)}
-.search-hint.ok{color:var(--accent-dark)}
-.search-results{margin-top:.55rem;border:1px solid var(--border);border-radius:.5rem;background:var(--bg-card);max-height:15rem;overflow-y:auto}
-.search-result{padding:.55rem .7rem;border-bottom:1px solid var(--border);cursor:pointer}
-.search-result:last-child{border-bottom:none}
-.search-result:hover{background:var(--accent-bg)}
-.sr-title{font-weight:600;font-size:.92rem}
-.sr-sub{font-size:.76rem;color:var(--muted);margin-top:.1rem}
-.btn-sm{padding:.4rem .7rem;font-size:.82rem}
-.hint-inline{font-size:.76rem;color:var(--muted);margin-left:.55rem}
-.lyrics-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;margin-bottom:.45rem}
-.copyright-note{font-size:.75rem;color:var(--muted);line-height:1.45;margin-top:.5rem;padding-top:.5rem;border-top:1px dashed var(--border2)}
-
 @media print{
-  .header,.fab,.toolbar,.reorder-btn,.no-print{display:none!important}
+  .header,.toolbar,.no-print{display:none!important}
   .main{max-width:none;padding:0}
   .song-print{page-break-after:always;padding:1.2cm}
   .song-print:last-child{page-break-after:auto}
@@ -123,43 +93,19 @@ input:focus,textarea:focus,button:focus{outline:2px solid var(--accent);outline-
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const {useState,useEffect,useMemo,useRef} = React;
+const {useState,useEffect,useRef} = React;
 
-const LS_LISTS = 'lyrics-lists';
-const LS_SONGS = 'lyrics-songs';
-
-function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+const LS_COLLECTION = 'lyrics-sammlung';
+const LS_LEGACY = ['lyrics-lists','lyrics-songs'];
+const FILE_TYPE = 'lyrics-liste-sammlung';
+const ALL_ID = '__alle__';
 
 function loadJSON(key, fallback){
   try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
   catch(e){ return fallback; }
 }
 
-async function searchSongs(term){
-  const url = 'https://itunes.apple.com/search?entity=song&limit=10&term=' + encodeURIComponent(term);
-  const res = await fetch(url);
-  if(!res.ok) throw new Error('search failed');
-  const data = await res.json();
-  const seen = new Set();
-  const out = [];
-  for(const r of (data.results||[])){
-    if(!r.trackName || !r.artistName) continue;
-    const key = (r.trackName+'|'+r.artistName).toLowerCase();
-    if(seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      title: r.trackName,
-      artist: r.artistName,
-      year: (r.releaseDate||'').slice(0,4),
-      album: r.collectionName || ''
-    });
-  }
-  return out;
-}
-
-function geniusSearchUrl(title, artist){
-  return 'https://genius.com/search?q=' + encodeURIComponent((title+' '+(artist||'')).trim());
-}
+function str(v){ return v==null ? '' : String(v).trim(); }
 
 function cleanLyrics(text){
   return text
@@ -171,42 +117,18 @@ function cleanLyrics(text){
     .trim();
 }
 
-function safeFilename(name){
-  const base = (name||'liste').normalize('NFKD')
-    .replace(/[^A-Za-z0-9\-_ ]+/g,'').trim().replace(/\s+/g,'-');
-  return (base || 'liste') + '.json';
+function sortSongs(arr){
+  return arr.slice().sort((a,b)=>a.title.localeCompare(b.title,'de'));
 }
 
-function buildExportPayload(list, songs){
-  const exportSongs = {};
-  list.songIds.forEach(id=>{ if(songs[id]) exportSongs[id] = songs[id]; });
-  return {
-    type: 'lyrics-liste-list',
-    version: 1,
-    list: {id: list.id, name: list.name, songIds: list.songIds.filter(id=>exportSongs[id])},
-    songs: exportSongs
-  };
+function songSubline(s){
+  return [s.performer, s.year].filter(Boolean).join(' · ');
 }
 
-async function shareOrDownloadJSON(filename, dataObj){
-  const json = JSON.stringify(dataObj, null, 2);
-  const blob = new Blob([json], {type:'application/json'});
-  if(navigator.canShare){
-    try{
-      const file = new File([blob], filename, {type:'application/json'});
-      if(navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title: dataObj.list ? dataObj.list.name : filename});
-        return;
-      }
-    }catch(e){
-      if(e && e.name==='AbortError') return;
-    }
-  }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+function formatDate(value){
+  if(!value) return '';
+  const d = new Date(value);
+  return isNaN(d) ? value : d.toLocaleDateString('de-DE');
 }
 
 function readFileAsText(file){
@@ -218,21 +140,31 @@ function readFileAsText(file){
   });
 }
 
-function parseImportPayload(text){
+function parseCollection(text){
   let data;
   try{ data = JSON.parse(text); }
   catch(e){ throw new Error('Datei ist kein gültiges JSON.'); }
-  if(!data || data.type!=='lyrics-liste-list' || !data.list || !data.list.id || !data.list.name
-    || !Array.isArray(data.list.songIds) || !data.songs || typeof data.songs!=='object'){
-    throw new Error('Datei hat kein gültiges Lyrics-Liste-Format.');
+  if(!data || data.type!==FILE_TYPE || !Array.isArray(data.songs)){
+    throw new Error('Diese Datei ist keine Lieder-Sammlung für die Lyrics-Liste.');
   }
   const songs = {};
-  data.list.songIds.forEach(id=>{
-    const s = data.songs[id];
-    if(s && s.id===id && s.title) songs[id] = s;
+  data.songs.forEach(s=>{
+    if(!s || !str(s.id) || !str(s.title)) return;
+    const id = str(s.id);
+    songs[id] = {
+      id,
+      title: str(s.title),
+      writers: str(s.writers),
+      performer: str(s.performer),
+      year: str(s.year),
+      lyrics: cleanLyrics(str(s.lyrics))
+    };
   });
-  const list = {id: data.list.id, name: String(data.list.name), songIds: data.list.songIds.filter(id=>songs[id])};
-  return {list, songs};
+  if(Object.keys(songs).length===0) throw new Error('Die Datei enthält keine Lieder.');
+  const lists = (Array.isArray(data.lists) ? data.lists : [])
+    .filter(l=>l && str(l.id) && str(l.name) && Array.isArray(l.songIds))
+    .map(l=>({id: str(l.id), name: str(l.name), songIds: l.songIds.map(str).filter(id=>songs[id])}));
+  return {created: str(data.created), lists, songs};
 }
 
 function Confirm({title, message, confirmLabel, danger, onConfirm, onCancel}){
@@ -250,33 +182,6 @@ function Confirm({title, message, confirmLabel, danger, onConfirm, onCancel}){
   );
 }
 
-function PromptDialog({title, label, initialValue, placeholder, onSubmit, onCancel}){
-  const [value,setValue] = useState(initialValue||'');
-  const ref = useRef(null);
-  useEffect(()=>{ ref.current && ref.current.focus(); ref.current && ref.current.select(); },[]);
-  function submit(){
-    const v = value.trim();
-    if(v) onSubmit(v);
-  }
-  return (
-    <div className="overlay" onClick={onCancel}>
-      <div className="dialog" onClick={e=>e.stopPropagation()}>
-        <h3>{title}</h3>
-        <div className="field" style={{marginBottom:'1rem'}}>
-          {label && <label>{label}</label>}
-          <input ref={ref} value={value} placeholder={placeholder||''}
-            onChange={e=>setValue(e.target.value)}
-            onKeyDown={e=>{ if(e.key==='Enter') submit(); if(e.key==='Escape') onCancel(); }}/>
-        </div>
-        <div className="dialog-actions">
-          <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
-          <button className="btn btn-primary" onClick={submit}>Speichern</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Header({title, onBack, right}){
   return (
     <div className="header">
@@ -287,258 +192,108 @@ function Header({title, onBack, right}){
   );
 }
 
-function HomeView({lists, onOpenList, onCreateList, onImportFile}){
-  const [showPrompt,setShowPrompt] = useState(false);
+function HomeView({collection, onOpenList, onImportFile, onClear}){
+  const [showClear,setShowClear] = useState(false);
   const fileRef = useRef(null);
+  const songCount = collection ? Object.keys(collection.songs).length : 0;
+  const openFile = ()=>fileRef.current && fileRef.current.click();
   return (
     <React.Fragment>
-      <Header title="Lyrics-Listen" right={
-        <button className="icon-btn" title="Liste importieren" onClick={()=>fileRef.current && fileRef.current.click()}>&#128229;</button>
+      <Header title="Lyrics-Liste" right={
+        <div style={{display:'flex',gap:'.2rem'}}>
+          <button className="icon-btn" title="Lieder-Datei importieren" onClick={openFile}>&#128229;</button>
+          {songCount>0 && <button className="icon-btn" title="Alle Lieder von diesem Gerät entfernen" onClick={()=>setShowClear(true)}>&#128465;</button>}
+        </div>
       } />
       <input ref={fileRef} type="file" accept="application/json,.json" style={{display:'none'}}
         onChange={e=>{ const f=e.target.files[0]; if(f) onImportFile(f); e.target.value=''; }} />
       <div className="main">
-        {lists.length===0 &&
-          <div className="empty">Noch keine Liste angelegt.<br/>Erstelle eine Liste für deine Gruppe, z.B. „Hauskreis" oder „Jugendabend".</div>}
-        {lists.map(l=>(
-          <div className="card" key={l.id}>
-            <div className="card-row" onClick={()=>onOpenList(l.id)}>
-              <div className="title">{l.name}</div>
-              <div className="sub">{l.songIds.length} {l.songIds.length===1?'Song':'Songs'}</div>
-              <div className="chev">&#8250;</div>
+        {songCount===0 &&
+          <div className="empty">
+            Noch keine Lieder auf diesem Gerät.<br/>Importiere die Lieder-Datei, die du bekommen hast.
+            <div><button className="btn btn-primary" onClick={openFile}>Datei importieren</button></div>
+          </div>}
+        {songCount>0 &&
+          <React.Fragment>
+            <div className="card card-all">
+              <div className="card-row" onClick={()=>onOpenList(ALL_ID)}>
+                <div className="title">Alle Lieder</div>
+                <div className="sub">{songCount} {songCount===1?'Lied':'Lieder'}</div>
+                <div className="chev">&#8250;</div>
+              </div>
             </div>
-          </div>
-        ))}
+            {collection.lists.length>0 && <div className="section-label">Listen</div>}
+            {collection.lists.map(l=>(
+              <div className="card" key={l.id}>
+                <div className="card-row" onClick={()=>onOpenList(l.id)}>
+                  <div className="title">{l.name}</div>
+                  <div className="sub">{l.songIds.length} {l.songIds.length===1?'Lied':'Lieder'}</div>
+                  <div className="chev">&#8250;</div>
+                </div>
+              </div>
+            ))}
+            <div className="stand">Stand: {formatDate(collection.created || collection.importedAt)}</div>
+          </React.Fragment>}
       </div>
-      <button className="fab" onClick={()=>setShowPrompt(true)}>+</button>
-      {showPrompt && <PromptDialog title="Neue Liste" label="Name der Liste" placeholder="z.B. Hauskreis"
-        onSubmit={name=>{ onCreateList(name); setShowPrompt(false); }}
-        onCancel={()=>setShowPrompt(false)} />}
+      {showClear && <Confirm title="Alle Lieder entfernen?"
+        message="Alle Lieder und Listen werden von diesem Gerät gelöscht. Du kannst die Datei später erneut importieren."
+        confirmLabel="Entfernen" danger
+        onConfirm={()=>{ setShowClear(false); onClear(); }}
+        onCancel={()=>setShowClear(false)} />}
     </React.Fragment>
   );
 }
 
-function SongPicker({songs, excludeIds, onPick, onCreateNew, onCancel}){
-  const [q,setQ] = useState('');
-  const items = useMemo(()=>{
-    const term = q.trim().toLowerCase();
-    return Object.values(songs)
-      .filter(s=> !excludeIds.includes(s.id))
-      .filter(s=> !term || s.title.toLowerCase().includes(term) || (s.artist||'').toLowerCase().includes(term))
-      .sort((a,b)=>a.title.localeCompare(b.title,'de'));
-  },[songs,excludeIds,q]);
-  return (
-    <div className="overlay" onClick={onCancel}>
-      <div className="dialog" style={{maxWidth:'28rem'}} onClick={e=>e.stopPropagation()}>
-        <h3>Song hinzufügen</h3>
-        <div className="picker-search field">
-          <input autoFocus placeholder="Suchen…" value={q} onChange={e=>setQ(e.target.value)} />
-        </div>
-        <div className="picker-list">
-          {items.length===0 && <div className="picker-item" style={{color:'var(--muted)',cursor:'default'}}>Keine passenden Songs gefunden.</div>}
-          {items.map(s=>(
-            <div className="picker-item" key={s.id} onClick={()=>onPick(s.id)}>
-              <div>{s.title}</div>
-              {s.artist && <div className="artist">{s.artist}</div>}
-            </div>
-          ))}
-        </div>
-        <div className="dialog-actions" style={{marginTop:'1rem'}}>
-          <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
-          <button className="btn btn-primary" onClick={onCreateNew}>Neuen Song anlegen</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ListView({list, songs, onBack, onRename, onDelete, onAddExisting, onCreateSong, onRemoveSong, onOpenSong, onPrint, onExport}){
-  const [showPicker,setShowPicker] = useState(false);
-  const [showRename,setShowRename] = useState(false);
-  const [showDelete,setShowDelete] = useState(false);
-  const [showExport,setShowExport] = useState(false);
-  const orderedSongs = list.songIds.map(id=>songs[id]).filter(Boolean)
-    .sort((a,b)=>a.title.localeCompare(b.title,'de'));
-
+function ListView({list, songs, onBack, onOpenSong, onPrint}){
+  const orderedSongs = sortSongs(list.songIds.map(id=>songs[id]).filter(Boolean));
   return (
     <React.Fragment>
-      <Header title={list.name} onBack={onBack}
-        right={
-          <div style={{display:'flex',gap:'.2rem'}} className="no-print">
-            <button className="icon-btn" title="Liste teilen / exportieren" onClick={()=>setShowExport(true)}>&#128228;</button>
-            <button className="icon-btn" title="Umbenennen" onClick={()=>setShowRename(true)}>&#9998;</button>
-            <button className="icon-btn" title="Löschen" onClick={()=>setShowDelete(true)}>&#128465;</button>
-          </div>
-        } />
+      <Header title={list.name} onBack={onBack} />
       <div className="main">
-        <div className="toolbar">
-          <button className="btn btn-primary" onClick={()=>setShowPicker(true)}>+ Song hinzufügen</button>
-          {orderedSongs.length>0 && <button className="btn btn-secondary" onClick={onPrint}>Drucken / Anzeigen</button>}
-        </div>
-        {orderedSongs.length===0 &&
-          <div className="empty">Diese Liste hat noch keine Songs.<br/>Füge Songtexte hinzu, die du schon irgendwo hast.</div>}
+        {orderedSongs.length>0 &&
+          <div className="toolbar">
+            <button className="btn btn-secondary" onClick={onPrint}>Drucken / Anzeigen</button>
+          </div>}
+        {orderedSongs.length===0 && <div className="empty">Diese Liste enthält keine Lieder.</div>}
         <ul className="song-list">
           {orderedSongs.map(s=>(
-            <li className="song-item" key={s.id}>
-              <div className="title" onClick={()=>onOpenSong(s.id)}>
-                {s.title}{s.artist ? <span className="artist"> — {s.artist}</span> : null}
+            <li className="song-item" key={s.id} onClick={()=>onOpenSong(s.id)}>
+              <div className="title">
+                {s.title}{songSubline(s) ? <span className="artist"> — {songSubline(s)}</span> : null}
               </div>
-              <button className="reorder-btn" title="Aus Liste entfernen" onClick={()=>onRemoveSong(s.id)}>&#10005;</button>
+              <div className="chev">&#8250;</div>
             </li>
           ))}
         </ul>
       </div>
-      {showPicker && <SongPicker songs={songs} excludeIds={list.songIds}
-        onPick={id=>{ onAddExisting(id); setShowPicker(false); }}
-        onCreateNew={()=>{ setShowPicker(false); onCreateSong(); }}
-        onCancel={()=>setShowPicker(false)} />}
-      {showRename && <PromptDialog title="Liste umbenennen" initialValue={list.name}
-        onSubmit={name=>{ onRename(name); setShowRename(false); }}
-        onCancel={()=>setShowRename(false)} />}
-      {showDelete && <Confirm title="Liste löschen?" message={`„${list.name}" wird gelöscht. Die enthaltenen Songs bleiben in deiner Sammlung erhalten.`}
-        confirmLabel="Löschen" danger
-        onConfirm={()=>{ setShowDelete(false); onDelete(); }}
-        onCancel={()=>setShowDelete(false)} />}
-      {showExport && <Confirm title="Liste teilen"
-        message={`„${list.name}" mit ${orderedSongs.length} Songtext${orderedSongs.length===1?'':'en'} wird als Datei geteilt. Bitte nur an Personen weitergeben, für die eure Lizenz (z.B. CCLI) gilt.`}
-        confirmLabel="Teilen"
-        onConfirm={()=>{ setShowExport(false); onExport(); }}
-        onCancel={()=>setShowExport(false)} />}
     </React.Fragment>
   );
 }
 
-function SongEditor({song, onSave, onCancel}){
-  const [title,setTitle] = useState(song.title||'');
-  const [artist,setArtist] = useState(song.artist||'');
-  const [lyrics,setLyrics] = useState(song.lyrics||'');
-
-  const [query,setQuery] = useState('');
-  const [results,setResults] = useState([]);
-  const [searching,setSearching] = useState(false);
-  const [searchErr,setSearchErr] = useState('');
-  const [pickedMsg,setPickedMsg] = useState('');
-  const timerRef = useRef(null);
-
-  useEffect(()=>{
-    const term = query.trim();
-    if(term.length < 2){ setResults([]); setSearching(false); setSearchErr(''); return; }
-    setSearching(true); setSearchErr('');
-    clearTimeout(timerRef.current);
-    let cancelled = false;
-    timerRef.current = setTimeout(async ()=>{
-      try{
-        const r = await searchSongs(term);
-        if(cancelled) return;
-        setResults(r);
-        if(r.length===0) setSearchErr('Keine Treffer.');
-      }catch(e){
-        if(cancelled) return;
-        setSearchErr('Suche nicht möglich (offline?). Titel & Autor manuell eintragen.');
-        setResults([]);
-      }finally{
-        if(!cancelled) setSearching(false);
-      }
-    }, 400);
-    return ()=>{ cancelled = true; clearTimeout(timerRef.current); };
-  },[query]);
-
-  function pick(r){
-    setTitle(r.title);
-    setArtist(r.artist);
-    setResults([]);
-    setQuery('');
-    setSearchErr('');
-    setPickedMsg('Titel & Autor übernommen. Text unten einfügen.');
-  }
-
-  const canSearchLyrics = title.trim().length>0;
-
+function SongMeta({song}){
   return (
-    <React.Fragment>
-      <Header title={song.id ? 'Song bearbeiten' : 'Neuer Song'} onBack={onCancel} />
-      <div className="main">
-        <div className="search-box no-print">
-          <label>Song suchen — füllt Titel &amp; Autor automatisch</label>
-          <input value={query} onChange={e=>{ setQuery(e.target.value); setPickedMsg(''); }}
-            placeholder="z.B. Oceans Hillsong" autoFocus={!song.id} />
-          {searching && <div className="search-hint">Suche…</div>}
-          {!searching && searchErr && <div className="search-hint err">{searchErr}</div>}
-          {!searching && pickedMsg && <div className="search-hint ok">{pickedMsg}</div>}
-          {results.length>0 &&
-            <div className="search-results">
-              {results.map((r,i)=>(
-                <div className="search-result" key={i} onClick={()=>pick(r)}>
-                  <div className="sr-title">{r.title}</div>
-                  <div className="sr-sub">{r.artist}{r.year?' · '+r.year:''}{r.album?' · '+r.album:''}</div>
-                </div>
-              ))}
-            </div>}
-        </div>
-
-        <div className="field">
-          <label>Titel</label>
-          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Songtitel" />
-        </div>
-        <div className="field">
-          <label>Künstler / Autor (optional)</label>
-          <input value={artist} onChange={e=>setArtist(e.target.value)} placeholder="z.B. Hillsong" />
-        </div>
-        <div className="field">
-          <label>Songtext</label>
-          <div className="lyrics-actions no-print">
-            <button className="btn btn-secondary btn-sm" disabled={!canSearchLyrics}
-              onClick={()=>window.open(geniusSearchUrl(title,artist),'_blank','noopener')}>Text online suchen ↗</button>
-            <span className="hint-inline">Öffnet Genius im neuen Tab — Text kopieren und hier einfügen.</span>
-          </div>
-          <textarea value={lyrics} onChange={e=>setLyrics(e.target.value)} placeholder="Text hier einfügen…" />
-          <div className="copyright-note">Nur Lieder einfügen, für die eure Gruppe die Rechte bzw. eine Lizenz (z.B. CCLI) hat. Die App speichert Texte nur lokal auf diesem Gerät.</div>
-        </div>
-        <div className="toolbar">
-          <button className="btn btn-secondary" onClick={()=>setLyrics(cleanLyrics(lyrics))}>Text bereinigen</button>
-        </div>
-        <div className="toolbar">
-          <button className="btn btn-primary" disabled={!title.trim()}
-            onClick={()=>onSave({title:title.trim(), artist:artist.trim(), lyrics: cleanLyrics(lyrics)})}>Speichern</button>
-          <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
-        </div>
-      </div>
-    </React.Fragment>
+    <div className="song-meta">
+      <h2>{song.title}</h2>
+      {songSubline(song) && <div className="artist">{songSubline(song)}</div>}
+      {song.writers && <div className="writers">Songwriter: {song.writers}</div>}
+    </div>
   );
 }
 
-function SongView({song, usedInOtherLists, onBack, onEdit, onDelete}){
-  const [showDelete,setShowDelete] = useState(false);
+function SongView({song, onBack}){
   return (
     <React.Fragment>
-      <Header title={song.title} onBack={onBack}
-        right={
-          <div style={{display:'flex',gap:'.2rem'}} className="no-print">
-            <button className="icon-btn" title="Bearbeiten" onClick={onEdit}>&#9998;</button>
-            <button className="icon-btn" title="Löschen" onClick={()=>setShowDelete(true)}>&#128465;</button>
-          </div>
-        } />
+      <Header title={song.title} onBack={onBack} />
       <div className="main">
-        <div className="song-meta">
-          <h2>{song.title}</h2>
-          {song.artist && <div className="artist">{song.artist}</div>}
-        </div>
+        <SongMeta song={song} />
         <div className="lyrics-view">{song.lyrics || '(kein Text hinterlegt)'}</div>
       </div>
-      {showDelete && <Confirm title="Song löschen?"
-        message={usedInOtherLists>0
-          ? `„${song.title}" ist noch in ${usedInOtherLists} weiterer Liste${usedInOtherLists>1?'n':''} enthalten. Beim Löschen wird er überall entfernt.`
-          : `„${song.title}" wirklich endgültig löschen?`}
-        confirmLabel="Löschen" danger
-        onConfirm={()=>{ setShowDelete(false); onDelete(); }}
-        onCancel={()=>setShowDelete(false)} />}
     </React.Fragment>
   );
 }
 
 function PrintView({list, songs, onBack}){
-  const orderedSongs = list.songIds.map(id=>songs[id]).filter(Boolean)
-    .sort((a,b)=>a.title.localeCompare(b.title,'de'));
+  const orderedSongs = sortSongs(list.songIds.map(id=>songs[id]).filter(Boolean));
   return (
     <React.Fragment>
       <div className="header no-print">
@@ -549,10 +304,7 @@ function PrintView({list, songs, onBack}){
       <div className="main">
         {orderedSongs.map(s=>(
           <div className="song-print" key={s.id}>
-            <div className="song-meta">
-              <h2>{s.title}</h2>
-              {s.artist && <div className="artist">{s.artist}</div>}
-            </div>
+            <SongMeta song={s} />
             <div className="lyrics-view">{s.lyrics}</div>
           </div>
         ))}
@@ -562,135 +314,78 @@ function PrintView({list, songs, onBack}){
 }
 
 function App(){
-  const [lists,setLists] = useState(()=>loadJSON(LS_LISTS, []));
-  const [songs,setSongs] = useState(()=>loadJSON(LS_SONGS, {}));
+  const [collection,setCollection] = useState(()=>loadJSON(LS_COLLECTION, null));
   const [phase,setPhase] = useState('home');
   const [activeListId,setActiveListId] = useState(null);
   const [activeSongId,setActiveSongId] = useState(null);
-  const [editingNewSong,setEditingNewSong] = useState(false);
   const [pendingImport,setPendingImport] = useState(null);
   const [importError,setImportError] = useState('');
 
-  useEffect(()=>{ localStorage.setItem(LS_LISTS, JSON.stringify(lists)); },[lists]);
-  useEffect(()=>{ localStorage.setItem(LS_SONGS, JSON.stringify(songs)); },[songs]);
+  useEffect(()=>{
+    if(collection) localStorage.setItem(LS_COLLECTION, JSON.stringify(collection));
+    else localStorage.removeItem(LS_COLLECTION);
+  },[collection]);
 
-  const activeList = lists.find(l=>l.id===activeListId) || null;
+  const songs = collection ? collection.songs : {};
+  const activeList = !collection ? null
+    : activeListId===ALL_ID ? {id: ALL_ID, name: 'Alle Lieder', songIds: Object.keys(songs)}
+    : collection.lists.find(l=>l.id===activeListId) || null;
   const activeSong = activeSongId ? songs[activeSongId] : null;
 
-  function createList(name){
-    const l = {id:uid(), name, songIds:[]};
-    setLists(prev=>[...prev, l]);
-    setActiveListId(l.id);
-    setPhase('list');
-  }
-  function renameList(name){
-    setLists(prev=>prev.map(l=>l.id===activeListId?{...l,name}:l));
-  }
-  function deleteList(){
-    setLists(prev=>prev.filter(l=>l.id!==activeListId));
-    setActiveListId(null);
-    setPhase('home');
-  }
-  function addExistingSong(songId){
-    setLists(prev=>prev.map(l=>l.id===activeListId?{...l,songIds:[...l.songIds, songId]}:l));
-  }
-  function removeSongFromList(songId){
-    setLists(prev=>prev.map(l=>l.id===activeListId?{...l,songIds:l.songIds.filter(id=>id!==songId)}:l));
-  }
-  function saveNewSong(data){
-    const s = {id:uid(), ...data};
-    setSongs(prev=>({...prev, [s.id]: s}));
-    setLists(prev=>prev.map(l=>l.id===activeListId?{...l,songIds:[...l.songIds, s.id]}:l));
-    setEditingNewSong(false);
-    setPhase('list');
-  }
-  function saveEditedSong(data){
-    setSongs(prev=>({...prev, [activeSongId]: {...prev[activeSongId], ...data}}));
-    setPhase('song');
-  }
-  function deleteSong(){
-    const idToDelete = activeSongId;
-    setSongs(prev=>{ const next={...prev}; delete next[idToDelete]; return next; });
-    setLists(prev=>prev.map(l=>({...l, songIds:l.songIds.filter(id=>id!==idToDelete)})));
-    setActiveSongId(null);
-    setPhase('list');
-  }
-  function countOtherUsages(songId){
-    return lists.filter(l=>l.songIds.includes(songId)).length - (activeList && activeList.songIds.includes(songId) ? 1 : 0);
-  }
-  function exportList(){
-    if(!activeList) return;
-    shareOrDownloadJSON(safeFilename(activeList.name), buildExportPayload(activeList, songs));
+  function goHome(){
+    setActiveListId(null); setActiveSongId(null); setPhase('home');
   }
   async function handleImportFile(file){
     try{
       const text = await readFileAsText(file);
-      setPendingImport(parseImportPayload(text));
+      setPendingImport(parseCollection(text));
     }catch(e){
       setImportError(e.message || 'Import fehlgeschlagen.');
     }
   }
   function confirmImport(){
-    const payload = pendingImport;
-    setSongs(prev=>({...prev, ...payload.songs}));
-    setLists(prev=>{
-      const idx = prev.findIndex(l=>l.id===payload.list.id);
-      if(idx>=0){ const next=[...prev]; next[idx]=payload.list; return next; }
-      return [...prev, payload.list];
-    });
+    setCollection({...pendingImport, importedAt: new Date().toISOString()});
+    LS_LEGACY.forEach(k=>localStorage.removeItem(k));
     setPendingImport(null);
-    setActiveListId(payload.list.id);
-    setPhase('list');
+    goHome();
+  }
+  function clearAll(){
+    setCollection(null);
+    LS_LEGACY.forEach(k=>localStorage.removeItem(k));
+    goHome();
   }
 
   let view;
-  if(phase==='home'){
-    view = <HomeView lists={lists}
-      onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
-      onCreateList={createList}
-      onImportFile={handleImportFile} />;
-  }
-  else if(phase==='list' && activeList){
+  if(phase==='list' && activeList){
     view = <ListView list={activeList} songs={songs}
-      onBack={()=>{ setActiveListId(null); setPhase('home'); }}
-      onRename={renameList} onDelete={deleteList}
-      onAddExisting={addExistingSong}
-      onCreateSong={()=>{ setEditingNewSong(true); setPhase('newsong'); }}
-      onRemoveSong={removeSongFromList}
+      onBack={goHome}
       onOpenSong={id=>{ setActiveSongId(id); setPhase('song'); }}
-      onPrint={()=>setPhase('print')}
-      onExport={exportList} />;
-  }
-  else if(phase==='newsong'){
-    view = <SongEditor song={{}}
-      onSave={saveNewSong}
-      onCancel={()=>{ setEditingNewSong(false); setPhase('list'); }} />;
+      onPrint={()=>setPhase('print')} />;
   }
   else if(phase==='song' && activeSong){
-    view = <SongView song={activeSong} usedInOtherLists={countOtherUsages(activeSongId)}
-      onBack={()=>{ setActiveSongId(null); setPhase('list'); }}
-      onEdit={()=>setPhase('editsong')}
-      onDelete={deleteSong} />;
-  }
-  else if(phase==='editsong' && activeSong){
-    view = <SongEditor song={activeSong}
-      onSave={saveEditedSong}
-      onCancel={()=>setPhase('song')} />;
+    view = <SongView song={activeSong} onBack={()=>{ setActiveSongId(null); setPhase('list'); }} />;
   }
   else if(phase==='print' && activeList){
     view = <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')} />;
   }
   else {
-    view = <HomeView lists={lists} onOpenList={id=>{ setActiveListId(id); setPhase('list'); }} onCreateList={createList} onImportFile={handleImportFile} />;
+    view = <HomeView collection={collection}
+      onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
+      onImportFile={handleImportFile}
+      onClear={clearAll} />;
   }
+
+  const pendingCount = pendingImport ? Object.keys(pendingImport.songs).length : 0;
+  const pendingLists = pendingImport ? pendingImport.lists.length : 0;
 
   return (
     <React.Fragment>
       {view}
-      {pendingImport && <Confirm title="Liste importieren?"
-        message={lists.some(l=>l.id===pendingImport.list.id)
-          ? `„${pendingImport.list.name}" (${pendingImport.list.songIds.length} Songs) aktualisiert die bereits vorhandene Liste gleichen Ursprungs.`
-          : `„${pendingImport.list.name}" mit ${pendingImport.list.songIds.length} Song${pendingImport.list.songIds.length===1?'':'s'} importieren?`}
+      {pendingImport && <Confirm title="Lieder importieren?"
+        message={`${pendingCount} ${pendingCount===1?'Lied':'Lieder'}`
+          + (pendingLists ? ` in ${pendingLists} ${pendingLists===1?'Liste':'Listen'}` : '')
+          + (pendingImport.created ? ` (Stand ${formatDate(pendingImport.created)})` : '')
+          + (collection ? '. Ersetzt alle bisherigen Lieder und Listen auf diesem Gerät.' : '.')}
         confirmLabel="Importieren"
         onConfirm={confirmImport}
         onCancel={()=>setPendingImport(null)} />}

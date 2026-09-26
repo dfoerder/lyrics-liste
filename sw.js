@@ -57,7 +57,7 @@ self.addEventListener('fetch', event=>{
       }
     })());
   }
-  // Alles andere (z.B. iTunes-Suche) geht normal ans Netz
+  // Alles andere geht normal ans Netz
 });
 
 async function fetchAndCache(req){
