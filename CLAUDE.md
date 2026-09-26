@@ -17,6 +17,13 @@ Listen verwendet werden. Anzeige und Druck für den gemeinsamen Gebrauch.
 **Eine einzige Datei:** `index.html` enthält die gesamte App (React via
 Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 
+**Offline / PWA:**
+- `sw.js` — Service Worker. Cacht App-Shell und die CDN-Bibliotheken beim Install.
+  Eigene Dateien: Netz zuerst, offline aus dem Cache. CDN: Cache zuerst.
+  **Wenn die CDN-Versionen in `index.html` geändert werden:** `CDN_ASSETS` in
+  `sw.js` anpassen und `CACHE` hochzählen (`lyrics-liste-v2`, …).
+- `manifest.webmanifest` + `icons/` — Installierbarkeit (Homescreen)
+
 **Daten:**
 - `localStorage` — Nutzerstand:
   - `lyrics-lists` — Array der Listen: `[{id, name, songIds:[...]}]`
