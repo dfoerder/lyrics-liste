@@ -31,6 +31,14 @@ Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 performer, year, lyrics}]}` — `lists` optional. Format-Spezifikation für Claude
 steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
+**Lieder-Sammlung pflegen (auf dem Mac):**
+- `tools/lieder.py` — CLI für `privat/familien-lieder.json`: Text aus der
+  Zwischenablage formatieren und speichern, Angaben/Listen ändern, Vorschau,
+  Export nach `privat/versand/`. Gibt bewusst nie Songtexte aus.
+- Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
+  das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
+- `lieder-prompt.md` — Alternative für ein Claude-Projekt in der Claude-App.
+
 **Daten:**
 - `localStorage` `lyrics-sammlung` — die zuletzt importierte Sammlung:
   `{created, importedAt, lists:[...], songs:{ [id]: {...} }}`
