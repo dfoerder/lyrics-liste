@@ -49,8 +49,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 Songtexte christlicher Lieder sind urheberrechtlich geschützt. Die App liefert bewusst
 **keine Texte mit** und ist öffentlich (GitHub Pages) nur als leere Hülle erreichbar.
 Texte liegen nur im Browser-Speicher der Familiengeräte. Keine Songtexte ins Repo
-committen (auch nicht als Beispiel- oder Testdaten) und keine Features bauen, die
-Texte aus dem Netz beziehen, veröffentlichen oder aus der App heraus weitergeben.
+committen (auch nicht als Beispiel- oder Testdaten). Lieder-Dateien gehören in den
+Ordner `privat/`, der per `.gitignore` von Git ausgenommen ist. Keine Features bauen,
+die Texte aus dem Netz beziehen, veröffentlichen oder aus der App heraus weitergeben.
 
 ## Testen
 

@@ -1,3 +1,6 @@
 .DS_Store
 *.log
 node_modules/
+
+# Private Lieder-Dateien (Songtexte) – nie auf GitHub
+privat/
