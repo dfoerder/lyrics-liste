@@ -290,6 +290,12 @@ def describe(lyrics):
     return total, sections
 
 
+def stanza_sizes(lyrics):
+    """Zeilen je Block zwischen Leerzeilen (Abschnittsnamen zählen nicht mit)."""
+    blocks = [b for b in re.split(r'\n\s*\n', lyrics) if b.strip()]
+    return [sum(1 for l in b.split('\n') if l.strip() and normalize_label(l) != l) for b in blocks]
+
+
 def read_input(args):
     if args.text_datei:
         return Path(args.text_datei).read_text(encoding='utf-8')
@@ -331,7 +337,12 @@ def cmd_hinzufuegen(args, data):
         print(f'Text: {total} Zeilen in {len(sections)} Abschnitten: '
               + ', '.join(f'{n} ({c if c else "Wiederholung"})' for n, c in sections))
     else:
-        print(f'Text: {total} Zeilen, keine Abschnittsnamen erkannt')
+        sizes = stanza_sizes(lyrics)
+        print(f'Text: {total} Zeilen in {len(sizes)} {"Strophe" if len(sizes) == 1 else "Strophen"} (durch Leerzeilen getrennt): '
+              + ', '.join(map(str, sizes)) + ' Zeilen')
+    if max(stanza_sizes(lyrics) or [0]) > 12:
+        print('HINWEIS: Ein Block hat mehr als 12 Zeilen ohne Leerzeile – vermutlich fehlen '
+              'Leerzeilen zwischen den Strophen. In der App wirkt das wie ein langer Block.')
     removed = []
     if rep['akkordzeilen']:
         removed.append(f'{rep["akkordzeilen"]} Zeilen mit Akkorden')
@@ -422,8 +433,10 @@ def cmd_uebersicht(args, data):
     print(f'{lieder(len(data["songs"]))}, {len(data["lists"])} Listen (Stand {data.get("created", "?")})')
     for s in sorted(data['songs'], key=lambda s: s['title'].casefold()):
         total, _ = describe(s.get('lyrics', ''))
+        stanzas = len(stanza_sizes(s.get('lyrics', '')))
         lists = [l['name'] for l in data['lists'] if s['id'] in l['songIds']]
-        print(f'  [{s["id"]}] {song_line(s)} | {s.get("writers") or "Songwriter fehlt"} | {total} Zeilen'
+        print(f'  [{s["id"]}] {song_line(s)} | {s.get("writers") or "Songwriter fehlt"} | '
+              f'{total} Zeilen in {stanzas} {"Strophe" if stanzas == 1 else "Strophen"}'
               + (f' | Listen: {", ".join(lists)}' if lists else ''))
     for l in data['lists']:
         print(f'Liste "{l["name"]}": {lieder(len(l["songIds"]))}')

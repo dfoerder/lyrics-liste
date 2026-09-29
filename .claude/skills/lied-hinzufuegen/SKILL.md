@@ -41,13 +41,21 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
    ```bash
    python3 tools/lieder.py hinzufuegen --titel "Oceans (Where Feet May Fail)" --probelauf
    ```
-   Die Ausgabe zeigt erkannte Abschnitte, entfernte Zeilen und Hinweise aus der
+   Die Ausgabe zeigt die Strophen, entfernte Zeilen und Hinweise aus der
    Fußzeile (Songwriter, ©-Jahr, CCLI-Nummer). Achte auf Warnungen:
    - **Leere Zwischenablage, sehr kurzer Text oder „identischer Text wie bei …“:** Der
      Nutzer hat vermutlich etwas anderes kopiert. Sag es ihm und warte, bis er neu
      kopiert hat.
    - **Fußzeilen, die eigentlich Liedzeilen sind:** Das ist selten, aber möglich. Dann
      nachfragen.
+   - **„HINWEIS: Ein Block hat mehr als 12 Zeilen …“:** Dem Text fehlen vermutlich die
+     Leerzeilen zwischen den Strophen. Sag es dem Nutzer. Er kann den Text im Editor
+     mit Leerzeilen versehen, neu kopieren, und dann ersetzt du den Text.
+
+   Der Nutzer gliedert seine Texte bewusst nur mit Leerzeilen zwischen den Strophen,
+   ohne Abschnittsnamen wie „Strophe“ oder „Refrain“. Das ist vollständig. Empfiehl
+   keine Abschnittsnamen. Bringt ein kopierter Text sie mit, zum Beispiel aus
+   SongSelect, formatiert das Skript sie einheitlich.
 
 3. **Angaben bestimmen:**
    - **Titel:** offizieller Titel, wie er im Probelauf passt.
@@ -69,7 +77,7 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
    python3 tools/lieder.py hinzufuegen --titel "…" --songwriter "A, B" --interpret "…" --jahr 2013 --liste "Advent"
    ```
 
-5. **Kurz berichten:** Titel, Interpret, Jahr, Songwriter, Abschnitte und Zeilenzahl,
+5. **Kurz berichten:** Titel, Interpret, Jahr, Songwriter, Strophen und Zeilenzahl,
    was entfernt wurde und welche Angaben unsicher oder leer sind. Biete die Vorschau an.
    Erwähne am Ende, dass `/lieder-verschicken` die neue Datei an die Familie bringt,
    wenn er fertig ist.
