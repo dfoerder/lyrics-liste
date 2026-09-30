@@ -18,8 +18,9 @@ Deshalb wird immer die komplette Sammlung verschickt, nie nur die neuen Lieder.
    Das Skript prüft die Sammlung. Es meldet zum Beispiel Lieder ohne Text oder Listen,
    die auf gelöschte Lieder zeigen. Bei Fehlern wird nichts exportiert. Dann zeig dem
    Nutzer die Probleme und hilf sie zu beheben, meist mit `/lied-hinzufuegen`.
-   Ohne Fehler entsteht `privat/versand/familien-lieder-JJJJ-MM-TT.json`, und das
-   Skript listet die Änderungen seit dem letzten Versand auf.
+   Ohne Fehler entsteht `privat/versand/familien-lieder-JJJJ-MM-TT-hh-mm.json`, und das
+   Skript listet die Änderungen seit dem letzten Versand auf. Nimm für den nächsten
+   Schritt genau den Pfad, den das Skript unter „Export:“ ausgibt.
 
 2. **Keine Änderungen?** Sag das und frag, ob die Datei trotzdem raus soll, zum Beispiel
    für ein neues Familienmitglied.
@@ -47,7 +48,7 @@ Deshalb wird immer die komplette Sammlung verschickt, nie nur die neuen Lieder.
 
 5. **Finder und WhatsApp öffnen:**
    ```bash
-   open -R "privat/versand/familien-lieder-JJJJ-MM-TT.json"
+   open -R "privat/versand/familien-lieder-JJJJ-MM-TT-hh-mm.json"
    open -a WhatsApp
    ```
 

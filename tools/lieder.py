@@ -512,6 +512,12 @@ def diff(old, new):
     return added, changed, removed, lists
 
 
+def export_order(path):
+    """Sortierschlüssel für Versanddateien; ältere Namen ohne Uhrzeit zählen als 00:00."""
+    m = re.fullmatch(r'familien-lieder-(\d{4}-\d{2}-\d{2})(?:-(\d{2}-\d{2}))?\.json', path.name)
+    return (m.group(1), m.group(2) or '00-00') if m else ('', path.name)
+
+
 def cmd_export(args, data):
     if not data['songs']:
         raise Fehler('Die Sammlung ist leer – erst Lieder hinzufügen.')
@@ -520,8 +526,9 @@ def cmd_export(args, data):
         raise Fehler('Die Sammlung hat Fehler, nichts exportiert:\n  ' + '\n  '.join(problems))
     send_dir = args.datei.parent / 'versand'
     send_dir.mkdir(parents=True, exist_ok=True)
-    target = send_dir / f'familien-lieder-{today()}.json'
-    previous = sorted(p for p in send_dir.glob('familien-lieder-*.json') if p != target)
+    # Uhrzeit im Namen, damit mehrere Versände am selben Tag eigene Dateien bekommen
+    target = send_dir / f'familien-lieder-{datetime.datetime.now():%Y-%m-%d-%H-%M}.json'
+    previous = sorted((p for p in send_dir.glob('familien-lieder-*.json') if p != target), key=export_order)
     out = dict(data, created=today())
     target.write_text(json.dumps(out, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
