@@ -10,9 +10,13 @@ Familienandachten einer Familie (privater Gebrauch).
 Kernidee: Die App ist **ein reiner Viewer und beim Aufruf leer**. Lieder kommen
 ausschließlich über eine Import-Datei, die der Besitzer auf seinem Mac mit einem
 Claude-Prompt erstellt (Vorlage: `lieder-prompt.md`) und an die Familie schickt.
-Ein Import **ersetzt** alle vorhandenen Daten. In der App gibt es kein Anlegen,
-Bearbeiten, Online-Suchen oder Teilen/Exportieren von Liedern — bewusst so, aus
-rechtlichen Gründen. Solche Funktionen nicht wieder einbauen.
+Ein Import **ersetzt** alle Lieder und mitgeschickten Listen. In der App gibt es
+kein Anlegen, Bearbeiten, Online-Suchen oder Teilen/Exportieren von Liedern — bewusst
+so, aus rechtlichen Gründen. Solche Funktionen nicht wieder einbauen.
+
+Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
+auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
+bei einem Import erhalten. Deshalb Lied-ids in der Sammlung nie ändern.
 
 ## Architektur
 
@@ -42,13 +46,22 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 **Daten:**
 - `localStorage` `lyrics-sammlung` — die zuletzt importierte Sammlung:
   `{created, importedAt, lists:[...], songs:{ [id]: {...} }}`
+- `localStorage` `lyrics-eigene-listen` — eigene Listen: `[{id, name, songIds}]`
+  (ids beginnen mit `meine-`, eigene Reihenfolge). Werden weder vom Import noch vom
+  Mülleimer gelöscht; ids fehlender Lieder bleiben stehen und erscheinen wieder,
+  sobald das Lied zurückkommt.
 - Alte Schlüssel `lyrics-lists` / `lyrics-songs` (v1) werden beim Import bzw.
   beim Entfernen gelöscht.
 
 **React-Komponenten (in index.html):**
 - `App` — verwaltet `phase` (`home`, `list`, `song`, `print`), `collection`, Import
-- `HomeView` — „Alle Lieder" + Listen, Import-Button, alles entfernen, Stand-Datum
-- `ListView` — Lieder einer Liste (alphabetisch), nur lesen
+- `HomeView` — „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
+  Import-Button, alles entfernen, Stand-Datum
+- `ListView` — Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
+  eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
+  Entfernen/Umbenennen/Löschen
+- `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
+- `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter
 - `PrintView` — Druckansicht der ganzen Liste
 
@@ -74,4 +87,4 @@ Dann `http://localhost:8322` aufrufen.
 ## Keine Browser-Dialoge
 
 Nie `alert()`, `confirm()`, `prompt()` verwenden — immer Custom-Dialoge mit
-Ja/Nein-Buttons (siehe `Confirm` in `index.html`).
+Ja/Nein-Buttons (siehe `Confirm` und `PromptDialog` in `index.html`).

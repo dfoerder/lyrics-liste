@@ -65,8 +65,28 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .song-list{list-style:none}
 .song-item{display:flex;align-items:center;gap:.5rem;background:var(--bg-card);border:1px solid var(--border);border-radius:.6rem;padding:.65rem .8rem;margin-bottom:.5rem;cursor:pointer}
 .song-item:hover{background:var(--accent-bg)}
-.song-item .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-.song-item .artist{font-size:.78rem;color:var(--muted)}
+.song-item .title{flex:1;min-width:0}
+.song-item .song-name,.song-item .artist{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.song-item .song-name{font-weight:500}
+.song-item .artist{font-size:.78rem;color:var(--muted);margin-top:.1rem}
+.reorder-btn{width:2rem;height:2rem;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:.4rem;flex-shrink:0}
+.reorder-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.reorder-btn:disabled{opacity:.25;cursor:default}
+.reorder-btn:disabled:hover{background:none}
+.btn-new-list{width:100%;border:1px dashed var(--border2);background:none;color:var(--accent-dark);border-radius:.7rem;padding:.8rem 1rem;font-weight:600;font-size:.92rem}
+.btn-new-list:hover{background:var(--accent-bg)}
+.hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
+
+.field{margin-bottom:1rem}
+.field label{display:block;font-size:.8rem;color:var(--text2);font-weight:600;margin-bottom:.3rem}
+/* 16px, damit iOS beim Antippen nicht hineinzoomt */
+.field input{width:100%;padding:.6rem .7rem;border:1px solid var(--border2);border-radius:.5rem;background:var(--bg-card);font-family:inherit;font-size:1rem;color:var(--text)}
+.picker-list{max-height:50vh;overflow-y:auto;border:1px solid var(--border);border-radius:.5rem}
+.picker-item{padding:.65rem .8rem;border-bottom:1px solid var(--border);cursor:pointer}
+.picker-item:last-child{border-bottom:none}
+.picker-item:hover{background:var(--accent-bg)}
+.picker-item .artist{font-size:.78rem;color:var(--muted)}
+.picker-empty{padding:.8rem;color:var(--muted);font-size:.9rem}
 
 .lyrics-view{font-size:1.08rem;line-height:1.55;padding:.2rem 0}
 .lyrics-line{padding-left:1em;text-indent:-1em}
@@ -103,9 +123,15 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 const {useState,useEffect,useRef} = React;
 
 const LS_COLLECTION = 'lyrics-sammlung';
+// Eigene Listen der Familienmitglieder: nur Verweise auf Lied-ids, bleiben beim Import erhalten
+const LS_MY_LISTS = 'lyrics-eigene-listen';
 const LS_LEGACY = ['lyrics-lists','lyrics-songs'];
 const FILE_TYPE = 'lyrics-liste-sammlung';
 const ALL_ID = '__alle__';
+
+function uid(){ return 'meine-' + Math.random().toString(36).slice(2,8) + Date.now().toString(36); }
+
+function lieder(n){ return n + ' ' + (n===1 ? 'Lied' : 'Lieder'); }
 
 function loadJSON(key, fallback){
   try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
@@ -189,6 +215,64 @@ function Confirm({title, message, confirmLabel, danger, onConfirm, onCancel}){
   );
 }
 
+function PromptDialog({title, label, initialValue, placeholder, confirmLabel, onSubmit, onCancel}){
+  const [value,setValue] = useState(initialValue||'');
+  const ref = useRef(null);
+  useEffect(()=>{ ref.current && ref.current.focus(); },[]);
+  function submit(){
+    const v = value.trim();
+    if(v) onSubmit(v);
+  }
+  return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>{title}</h3>
+        <div className="field">
+          {label && <label>{label}</label>}
+          <input ref={ref} value={value} placeholder={placeholder||''}
+            onChange={e=>setValue(e.target.value)}
+            onKeyDown={e=>{ if(e.key==='Enter') submit(); if(e.key==='Escape') onCancel(); }} />
+        </div>
+        <div className="dialog-actions">
+          <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
+          <button className="btn btn-primary" disabled={!value.trim()} onClick={submit}>{confirmLabel||'Speichern'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SongPicker({songs, excludeIds, onPick, onClose}){
+  const [q,setQ] = useState('');
+  const term = q.trim().toLowerCase();
+  const items = sortSongs(Object.values(songs)
+    .filter(s=>!excludeIds.includes(s.id))
+    .filter(s=>!term || s.title.toLowerCase().includes(term) || (s.performer||'').toLowerCase().includes(term)));
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Lieder hinzufügen</h3>
+        <div className="field">
+          <input placeholder="Suchen…" value={q} onChange={e=>setQ(e.target.value)} />
+        </div>
+        <div className="picker-list">
+          {items.length===0 && <div className="picker-empty">
+            {term ? 'Kein passendes Lied gefunden.' : 'Alle Lieder sind schon in dieser Liste.'}</div>}
+          {items.map(s=>(
+            <div className="picker-item" key={s.id} onClick={()=>onPick(s.id)}>
+              <div>{s.title}</div>
+              {songSubline(s) && <div className="artist">{songSubline(s)}</div>}
+            </div>
+          ))}
+        </div>
+        <div className="dialog-actions" style={{marginTop:'1rem'}}>
+          <button className="btn btn-primary" onClick={onClose}>Fertig</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Header({title, onBack, right}){
   return (
     <div className="header">
@@ -199,9 +283,23 @@ function Header({title, onBack, right}){
   );
 }
 
-function HomeView({collection, onOpenList, onImportFile, onClear}){
+function ListCard({list, count, onOpen}){
+  return (
+    <div className="card">
+      <div className="card-row" onClick={onOpen}>
+        <div className="title">{list.name}</div>
+        <div className="sub">{lieder(count)}</div>
+        <div className="chev">&#8250;</div>
+      </div>
+    </div>
+  );
+}
+
+function HomeView({collection, myLists, onOpenList, onImportFile, onClear, onCreateMyList}){
   const [showClear,setShowClear] = useState(false);
+  const [showNewList,setShowNewList] = useState(false);
   const fileRef = useRef(null);
+  const songs = collection ? collection.songs : {};
   const songCount = collection ? Object.keys(collection.songs).length : 0;
   const openFile = ()=>fileRef.current && fileRef.current.click();
   return (
@@ -225,54 +323,110 @@ function HomeView({collection, onOpenList, onImportFile, onClear}){
             <div className="card card-all">
               <div className="card-row" onClick={()=>onOpenList(ALL_ID)}>
                 <div className="title">Alle Lieder</div>
-                <div className="sub">{songCount} {songCount===1?'Lied':'Lieder'}</div>
+                <div className="sub">{lieder(songCount)}</div>
                 <div className="chev">&#8250;</div>
               </div>
             </div>
             {collection.lists.length>0 && <div className="section-label">Listen</div>}
             {collection.lists.map(l=>(
-              <div className="card" key={l.id}>
-                <div className="card-row" onClick={()=>onOpenList(l.id)}>
-                  <div className="title">{l.name}</div>
-                  <div className="sub">{l.songIds.length} {l.songIds.length===1?'Lied':'Lieder'}</div>
-                  <div className="chev">&#8250;</div>
-                </div>
-              </div>
+              <ListCard key={l.id} list={l} count={l.songIds.length} onOpen={()=>onOpenList(l.id)} />
             ))}
+            <div className="section-label">Meine Listen</div>
+            {myLists.map(l=>(
+              <ListCard key={l.id} list={l} count={l.songIds.filter(id=>songs[id]).length}
+                onOpen={()=>onOpenList(l.id)} />
+            ))}
+            <button className="btn-new-list" onClick={()=>setShowNewList(true)}>+ Neue Liste</button>
             <div className="stand">Stand: {formatDate(collection.created || collection.importedAt)}</div>
           </React.Fragment>}
       </div>
       {showClear && <Confirm title="Alle Lieder entfernen?"
-        message="Alle Lieder und Listen werden von diesem Gerät gelöscht. Du kannst die Datei später erneut importieren."
+        message={'Alle Lieder und die mitgeschickten Listen werden von diesem Gerät gelöscht. Du kannst die Datei später erneut importieren.'
+          + (myLists.length ? ' Deine eigenen Listen bleiben erhalten und füllen sich beim nächsten Import wieder.' : '')}
         confirmLabel="Entfernen" danger
         onConfirm={()=>{ setShowClear(false); onClear(); }}
         onCancel={()=>setShowClear(false)} />}
+      {showNewList && <PromptDialog title="Neue Liste" label="Name der Liste" placeholder="z.B. Meine Lieblingslieder"
+        confirmLabel="Anlegen"
+        onSubmit={name=>{ setShowNewList(false); onCreateMyList(name); }}
+        onCancel={()=>setShowNewList(false)} />}
     </React.Fragment>
   );
 }
 
-function ListView({list, songs, onBack, onOpenSong, onPrint}){
-  const orderedSongs = sortSongs(list.songIds.map(id=>songs[id]).filter(Boolean));
+// Eigene Listen in eigener Reihenfolge, alle anderen alphabetisch
+function listSongs(list, songs){
+  const present = list.songIds.map(id=>songs[id]).filter(Boolean);
+  return list.own ? present : sortSongs(present);
+}
+
+function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete}){
+  const [showPicker,setShowPicker] = useState(false);
+  const [showRename,setShowRename] = useState(false);
+  const [showDelete,setShowDelete] = useState(false);
+  const orderedSongs = listSongs(list, songs);
+  const missing = list.songIds.length - orderedSongs.length;
+
+  function move(index, delta){
+    // Verschieben innerhalb der vorhandenen Lieder; fehlende ids bleiben hinten erhalten
+    const ids = orderedSongs.map(s=>s.id);
+    const target = index + delta;
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    onUpdate({...list, songIds: [...ids, ...list.songIds.filter(id=>!songs[id])]});
+  }
+  function remove(id){
+    onUpdate({...list, songIds: list.songIds.filter(x=>x!==id)});
+  }
+
   return (
     <React.Fragment>
-      <Header title={list.name} onBack={onBack} />
+      <Header title={list.name} onBack={onBack} right={list.own &&
+        <div style={{display:'flex',gap:'.2rem'}}>
+          <button className="icon-btn" title="Umbenennen" onClick={()=>setShowRename(true)}>&#9998;</button>
+          <button className="icon-btn" title="Liste löschen" onClick={()=>setShowDelete(true)}>&#128465;</button>
+        </div>} />
       <div className="main">
-        {orderedSongs.length>0 &&
-          <div className="toolbar">
-            <button className="btn btn-secondary" onClick={onPrint}>Drucken / Anzeigen</button>
-          </div>}
-        {orderedSongs.length===0 && <div className="empty">Diese Liste enthält keine Lieder.</div>}
+        <div className="toolbar">
+          {list.own && <button className="btn btn-primary" onClick={()=>setShowPicker(true)}>+ Lieder hinzufügen</button>}
+          {orderedSongs.length>0 && <button className="btn btn-secondary" onClick={onPrint}>Drucken / Anzeigen</button>}
+        </div>
+        {missing>0 && <div className="hint">
+          {missing===1
+            ? '1 Lied dieser Liste ist gerade nicht in der Sammlung. Kommt es mit einer neuen Lieder-Datei zurück, erscheint es wieder.'
+            : `${missing} Lieder dieser Liste sind gerade nicht in der Sammlung. Kommen sie mit einer neuen Lieder-Datei zurück, erscheinen sie wieder.`}</div>}
+        {orderedSongs.length===0 && <div className="empty">
+          {list.own ? 'Noch keine Lieder in dieser Liste.' : 'Diese Liste enthält keine Lieder.'}</div>}
         <ul className="song-list">
-          {orderedSongs.map(s=>(
+          {orderedSongs.map((s,i)=>(
             <li className="song-item" key={s.id} onClick={()=>onOpenSong(s.id)}>
               <div className="title">
-                {s.title}{songSubline(s) ? <span className="artist"> — {songSubline(s)}</span> : null}
+                <span className="song-name">{s.title}</span>
+                {songSubline(s) && <span className="artist">{songSubline(s)}</span>}
               </div>
-              <div className="chev">&#8250;</div>
+              {list.own ? <React.Fragment>
+                <button className="reorder-btn" title="Nach oben" disabled={i===0}
+                  onClick={e=>{ e.stopPropagation(); move(i,-1); }}>&#8593;</button>
+                <button className="reorder-btn" title="Nach unten" disabled={i===orderedSongs.length-1}
+                  onClick={e=>{ e.stopPropagation(); move(i,1); }}>&#8595;</button>
+                <button className="reorder-btn" title="Aus Liste entfernen"
+                  onClick={e=>{ e.stopPropagation(); remove(s.id); }}>&#10005;</button>
+              </React.Fragment>
+              : <div className="chev">&#8250;</div>}
             </li>
           ))}
         </ul>
       </div>
+      {showPicker && <SongPicker songs={songs} excludeIds={list.songIds}
+        onPick={id=>onUpdate({...list, songIds:[...list.songIds, id]})}
+        onClose={()=>setShowPicker(false)} />}
+      {showRename && <PromptDialog title="Liste umbenennen" label="Name der Liste" initialValue={list.name}
+        onSubmit={name=>{ setShowRename(false); onUpdate({...list, name}); }}
+        onCancel={()=>setShowRename(false)} />}
+      {showDelete && <Confirm title="Liste löschen?"
+        message={`„${list.name}" wird gelöscht. Die Lieder selbst bleiben in der Sammlung.`}
+        confirmLabel="Löschen" danger
+        onConfirm={()=>{ setShowDelete(false); onDelete(); }}
+        onCancel={()=>setShowDelete(false)} />}
     </React.Fragment>
   );
 }
@@ -315,7 +469,7 @@ function SongView({song, onBack}){
 }
 
 function PrintView({list, songs, onBack}){
-  const orderedSongs = sortSongs(list.songIds.map(id=>songs[id]).filter(Boolean));
+  const orderedSongs = listSongs(list, songs);
   return (
     <React.Fragment>
       <div className="header no-print">
@@ -337,6 +491,7 @@ function PrintView({list, songs, onBack}){
 
 function App(){
   const [collection,setCollection] = useState(()=>loadJSON(LS_COLLECTION, null));
+  const [myLists,setMyLists] = useState(()=>loadJSON(LS_MY_LISTS, []));
   const [phase,setPhase] = useState('home');
   const [activeListId,setActiveListId] = useState(null);
   const [activeSongId,setActiveSongId] = useState(null);
@@ -347,10 +502,13 @@ function App(){
     if(collection) localStorage.setItem(LS_COLLECTION, JSON.stringify(collection));
     else localStorage.removeItem(LS_COLLECTION);
   },[collection]);
+  useEffect(()=>{ localStorage.setItem(LS_MY_LISTS, JSON.stringify(myLists)); },[myLists]);
 
   const songs = collection ? collection.songs : {};
+  const myList = myLists.find(l=>l.id===activeListId);
   const activeList = !collection ? null
     : activeListId===ALL_ID ? {id: ALL_ID, name: 'Alle Lieder', songIds: Object.keys(songs)}
+    : myList ? {...myList, own: true}
     : collection.lists.find(l=>l.id===activeListId) || null;
   const activeSong = activeSongId ? songs[activeSongId] : null;
 
@@ -372,8 +530,22 @@ function App(){
     goHome();
   }
   function clearAll(){
+    // Eigene Listen bleiben bewusst erhalten (nur Verweise, füllen sich beim nächsten Import)
     setCollection(null);
     LS_LEGACY.forEach(k=>localStorage.removeItem(k));
+    goHome();
+  }
+  function createMyList(name){
+    const l = {id: uid(), name, songIds: []};
+    setMyLists(prev=>[...prev, l]);
+    setActiveListId(l.id);
+    setPhase('list');
+  }
+  function updateMyList({id, name, songIds}){
+    setMyLists(prev=>prev.map(l=>l.id===id ? {id, name, songIds} : l));
+  }
+  function deleteMyList(){
+    setMyLists(prev=>prev.filter(l=>l.id!==activeListId));
     goHome();
   }
 
@@ -382,7 +554,9 @@ function App(){
     view = <ListView list={activeList} songs={songs}
       onBack={goHome}
       onOpenSong={id=>{ setActiveSongId(id); setPhase('song'); }}
-      onPrint={()=>setPhase('print')} />;
+      onPrint={()=>setPhase('print')}
+      onUpdate={updateMyList}
+      onDelete={deleteMyList} />;
   }
   else if(phase==='song' && activeSong){
     view = <SongView song={activeSong} onBack={()=>{ setActiveSongId(null); setPhase('list'); }} />;
@@ -391,10 +565,11 @@ function App(){
     view = <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')} />;
   }
   else {
-    view = <HomeView collection={collection}
+    view = <HomeView collection={collection} myLists={myLists}
       onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
       onImportFile={handleImportFile}
-      onClear={clearAll} />;
+      onClear={clearAll}
+      onCreateMyList={createMyList} />;
   }
 
   const pendingCount = pendingImport ? Object.keys(pendingImport.songs).length : 0;
@@ -407,7 +582,8 @@ function App(){
         message={`${pendingCount} ${pendingCount===1?'Lied':'Lieder'}`
           + (pendingLists ? ` in ${pendingLists} ${pendingLists===1?'Liste':'Listen'}` : '')
           + (pendingImport.created ? ` (Stand ${formatDate(pendingImport.created)})` : '')
-          + (collection ? '. Ersetzt alle bisherigen Lieder und Listen auf diesem Gerät.' : '.')}
+          + (collection ? '. Ersetzt alle bisherigen Lieder und mitgeschickten Listen auf diesem Gerät.' : '.')
+          + (myLists.length ? ' Deine eigenen Listen bleiben erhalten.' : '')}
         confirmLabel="Importieren"
         onConfirm={confirmImport}
         onCancel={()=>setPendingImport(null)} />}

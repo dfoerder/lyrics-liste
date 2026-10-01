@@ -61,7 +61,10 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
      Version mit anderem Interpreten. Sag das dem Nutzer und frag, ob er beide Versionen
      behalten will oder die alte ersetzt werden soll. Zum Ersetzen speicherst du die
      neue Version und entfernst danach die alte mit `entfernen <id>`. Listen-Einträge
-     der alten Version musst du dabei auf die neue übertragen.
+     der alten Version musst du dabei auf die neue übertragen. Weise den Nutzer darauf
+     hin: Die Familie kann in der App eigene Listen anlegen, die Lieder über ihre id
+     merken. Eine neue Version hat eine neue id und fällt dort heraus. Soll nur der
+     Text korrigiert werden, ist `--ersetzen` besser, weil die id dann bleibt.
    - **„WARNUNG: Jahr … ist keine vierstellige Jahreszahl“:** Korrigieren.
    - **„HINWEIS: Ein Block hat mehr als 12 Zeilen …“:** Dem Text fehlen vermutlich die
      Leerzeilen zwischen den Strophen. Sag es dem Nutzer. Er kann den Text im Editor
