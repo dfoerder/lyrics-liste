@@ -102,8 +102,9 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
 
 ## Noten (z.B. Taizé-Gesänge)
 
-Für mehrstimmige Lieder kann ein Lied zusätzlich Notenbilder haben (GIF, PNG oder
-JPEG). Die App zeigt sie über dem Text an, in Vollbild mit Zoom und im Druck. Der
+Für mehrstimmige Lieder kann ein Lied zusätzlich Noten haben: GIF, PNG, JPEG oder
+PDF. Die gekauften Taizé-Noten von eXultet sind PDFs, zum Beispiel
+`Choeur-<Titel>.pdf`. Die App zeigt sie über dem Text an, in Vollbild mit Zoom und im Druck. Der
 Text bleibt trotzdem wichtig: Der Nutzer will bei Liedern mit Noten **Noten und Text**.
 Wer keine Noten liest, kann so die Schriftgröße einstellen.
 
@@ -111,13 +112,15 @@ Wer keine Noten liest, kann so die Schriftgröße einstellen.
    offiziellen Download von Taizé. Sagt er nicht genau, wo die Datei liegt, schau
    nach den neuesten Bildern im Download-Ordner:
    ```bash
-   ls -lt ~/Downloads/*.gif ~/Downloads/*.png ~/Downloads/*.jpg 2>/dev/null | head -5
+   ls -lt ~/Downloads/*.pdf ~/Downloads/*.gif ~/Downloads/*.png ~/Downloads/*.jpg 2>/dev/null | head -5
    ```
    Nenn ihm Dateiname und Zeitpunkt und lass dir bestätigen, dass es die richtige
    Datei ist. Bei mehreren Seiten auch die Reihenfolge. Auf Wunsch zeigt
    `open -a Preview <datei>` das Bild.
-2. **Unverändert übernehmen:** Das Skript bettet das Bild Byte für Byte ein. Schneide,
-   skaliere oder bearbeite es nicht. Taizé erlaubt nur die Wiedergabe in der
+2. **Unverändert übernehmen:** Das Skript bettet Bilder Byte für Byte ein. PDFs rendert
+   es Seite für Seite als PNG mit 144 dpi, als ganze Seite ohne Zuschnitt
+   (`tools/pdf_seiten.swift`, macOS-Bordmittel). Die erste Umwandlung dauert ein paar
+   Sekunden. Schneide, skaliere oder bearbeite die Noten nicht. Taizé erlaubt nur die Wiedergabe in der
    Originalfassung, und das gilt auch sonst für fremde Noten.
 3. **Neues Lied mit Noten:** wie gewohnt mit Text aus der Zwischenablage, plus
    `--noten <datei>` (mehrfach für mehrere Seiten):

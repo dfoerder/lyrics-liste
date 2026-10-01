@@ -38,8 +38,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **Lieder-Sammlung pflegen (auf dem Mac):**
 - `tools/lieder.py` — CLI für `privat/familien-lieder.json`: Text aus der
-  Zwischenablage formatieren und speichern, Notenbilder anhängen (`--noten`,
-  `noten`), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
+  Zwischenablage formatieren und speichern, Noten anhängen (`--noten`, `noten`;
+  GIF/PNG/JPEG unverändert, PDF seitenweise als PNG über `tools/pdf_seiten.swift`), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
   bewusst nie Songtexte oder Bildinhalte aus.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.

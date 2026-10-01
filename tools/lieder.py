@@ -11,7 +11,7 @@ Befehle:
   entfernen     Lied löschen (auch aus allen Listen)
   liste         Lieder einer Liste hinzufügen/entfernen, Liste löschen
   uebersicht    Alle Lieder und Listen (ohne Text)
-  noten         Notenbilder (GIF/PNG/JPEG) an ein Lied hängen oder entfernen
+  noten         Noten (GIF/PNG/JPEG/PDF) an ein Lied hängen oder entfernen
   vorschau      Formatierte Texte als HTML im Browser öffnen
   export        Datei für den Versand erzeugen (privat/versand/…)
 """
@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -308,19 +309,44 @@ IMAGE_TYPES = [(b'GIF87a', 'image/gif'), (b'GIF89a', 'image/gif'), (b'\x89PNG', 
                (b'\xff\xd8\xff', 'image/jpeg')]
 
 
-def read_score(path):
-    """Notenbild unverändert als data-URI einlesen (Taizé: nur Originalfassung erlaubt)."""
+PDF_SCALE = '2'   # 144 dpi
+
+
+def image_uri(raw, name):
+    mime = next((m for sig, m in IMAGE_TYPES if raw.startswith(sig)), None)
+    if not mime:
+        raise Fehler(f'{name} ist kein GIF-, PNG- oder JPEG-Bild und kein PDF.')
+    if len(raw) > 1_000_000:
+        print(f'WARNUNG: {name} ist {len(raw) // 1024} KB groß – die Lieder-Datei wird dadurch deutlich größer.')
+    return f'data:{mime};base64,' + base64.b64encode(raw).decode('ascii')
+
+
+def pdf_pages(path):
+    """Jede PDF-Seite als PNG rendern (ganze Seite, ohne Zuschnitt) – siehe pdf_seiten.swift."""
+    with tempfile.TemporaryDirectory() as tmp:
+        res = subprocess.run(['swift', str(ROOT / 'tools' / 'pdf_seiten.swift'), str(path), tmp, PDF_SCALE],
+                             capture_output=True, text=True)
+        if res.returncode != 0:
+            raise Fehler(f'PDF {path.name} konnte nicht in Bilder umgewandelt werden: {res.stderr.strip()[:300]}')
+        pages = [Path(line) for line in res.stdout.split() if line.endswith('.png')]
+        if not pages:
+            raise Fehler(f'PDF {path.name} hat keine Seiten.')
+        return [image_uri(pg.read_bytes(), f'{path.name} Seite {i + 1}') for i, pg in enumerate(pages)]
+
+
+def read_scores(path):
+    """Notenbild(er) unverändert als data-URIs (Taizé: nur Originalfassung erlaubt).
+    Bilder werden Byte für Byte übernommen, PDFs seitenweise als PNG gerendert."""
     p = Path(path).expanduser()
     try:
         raw = p.read_bytes()
     except OSError as err:
-        raise Fehler(f'Notenbild nicht lesbar: {err}')
-    mime = next((m for sig, m in IMAGE_TYPES if raw.startswith(sig)), None)
-    if not mime:
-        raise Fehler(f'{p.name} ist kein GIF-, PNG- oder JPEG-Bild.')
-    if len(raw) > 1_000_000:
-        print(f'WARNUNG: {p.name} ist {len(raw) // 1024} KB groß – die Lieder-Datei wird dadurch deutlich größer.')
-    return f'data:{mime};base64,' + base64.b64encode(raw).decode('ascii')
+        raise Fehler(f'Notendatei nicht lesbar: {err}')
+    if raw.startswith(b'%PDF'):
+        uris = pdf_pages(p)
+        print(f'PDF {p.name}: {len(uris)} {"Seite" if len(uris) == 1 else "Seiten"} als Bild übernommen')
+        return uris
+    return [image_uri(raw, p.name)]
 
 
 def scores_info(song):
@@ -367,7 +393,7 @@ def cmd_hinzufuegen(args, data):
     pick = lambda value, field: value.strip() if value is not None else keep.get(field, '')
     song = {'id': song_id, 'title': args.titel.strip(), 'writers': pick(args.songwriter, 'writers'),
             'performer': pick(args.interpret, 'performer'), 'year': pick(args.jahr, 'year'), 'lyrics': lyrics}
-    scores = [read_score(f) for f in args.noten] if args.noten else keep.get('scores', [])
+    scores = [u for f in args.noten for u in read_scores(f)] if args.noten else keep.get('scores', [])
     if scores:
         song['scores'] = scores
 
@@ -497,7 +523,7 @@ def cmd_noten(args, data):
         return True
     if not args.bilder:
         raise Fehler('Bitte mindestens ein Notenbild angeben (oder --entfernen).')
-    s['scores'] = [read_score(f) for f in args.bilder]
+    s['scores'] = [u for f in args.bilder for u in read_scores(f)]
     print(f'Noten gesetzt: {song_line(s)} – {scores_info(s)}')
     return True
 
@@ -643,7 +669,7 @@ def main(argv=None):
     a.add_argument('--ersetzen', action='store_true', help='vorhandenes Lied mit gleicher id überschreiben')
     a.add_argument('--probelauf', action='store_true', help='nur zeigen, was passieren würde')
     a.add_argument('--noten', action='append', metavar='BILD',
-                   help='Notenbild (GIF/PNG/JPEG) anhängen, mehrfach für mehrere Seiten')
+                   help='Noten anhängen: GIF/PNG/JPEG oder PDF (alle Seiten), mehrfach möglich')
     a.add_argument('--titelzeile-behalten', action='store_true',
                    help='erste Zeile nicht als Titelzeile entfernen, auch wenn sie dem Titel gleicht')
     a.add_argument('--ohne-version', action='store_true',
