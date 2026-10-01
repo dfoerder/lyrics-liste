@@ -120,6 +120,16 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .dialog p{color:var(--text2);font-size:.92rem;line-height:1.5;margin-bottom:1rem}
 .dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}
 
+.scores{margin-bottom:1rem}
+.scores img{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--border);border-radius:.4rem;margin-bottom:.6rem;cursor:zoom-in}
+.score-viewer{position:fixed;inset:0;background:#fff;z-index:200;display:flex;flex-direction:column}
+.score-bar{display:flex;align-items:center;gap:.4rem;padding:.6rem 1rem;padding-top:calc(.6rem + env(safe-area-inset-top));border-bottom:1px solid var(--border);background:var(--bg-card)}
+.score-bar .label{flex:1;font-size:.9rem;color:var(--text2)}
+.score-bar .size-btn{font-size:1.5rem;width:2.6rem;height:2.6rem}
+.score-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom)}
+.score-scroll img{display:block;width:100%;height:auto;border-bottom:1px solid var(--border)}
+.loading{text-align:center;color:var(--muted);padding:3rem 1rem}
+
 @media print{
   .header,.toolbar,.no-print{display:none!important}
   .main{max-width:none;padding:0}
@@ -128,6 +138,7 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
   body{background:#fff}
   .lyrics-view{font-size:13pt}
   .lyrics-label{font-size:9pt;color:#555}
+  .scores img{border:none;page-break-inside:avoid;cursor:default}
 }
 </style>
 </head>
@@ -136,7 +147,12 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 <script type="text/babel" data-presets="react">
 const {useState,useEffect,useRef} = React;
 
+// Die Sammlung (mit Notenbildern) liegt in IndexedDB – localStorage hat auf iOS nur ~5 MB.
+// Ältere Versionen speicherten sie unter LS_COLLECTION; sie wird beim ersten Laden übernommen.
 const LS_COLLECTION = 'lyrics-sammlung';
+const DB_NAME = 'lyrics-liste';
+const DB_STORE = 'daten';
+const DB_KEY_COLLECTION = 'sammlung';
 // Eigene Listen der Familienmitglieder: nur Verweise auf Lied-ids, bleiben beim Import erhalten
 const LS_MY_LISTS = 'lyrics-eigene-listen';
 // Schriftgröße der Liedtexte, pro Gerät gemerkt (Index in FONT_SCALES)
@@ -158,6 +174,51 @@ function loadJSON(key, fallback){
 
 function str(v){ return v==null ? '' : String(v).trim(); }
 
+function idbRun(mode, fn){
+  return new Promise((resolve,reject)=>{
+    const open = indexedDB.open(DB_NAME, 1);
+    open.onupgradeneeded = ()=>open.result.createObjectStore(DB_STORE);
+    open.onerror = ()=>reject(open.error);
+    open.onsuccess = ()=>{
+      const db = open.result;
+      const tx = db.transaction(DB_STORE, mode);
+      const req = fn(tx.objectStore(DB_STORE));
+      tx.oncomplete = ()=>{ db.close(); resolve(req.result); };
+      tx.onabort = ()=>{ db.close(); reject(tx.error || new Error('Speichern abgebrochen')); };
+    };
+  });
+}
+
+async function loadCollection(){
+  try{
+    const stored = await idbRun('readonly', st=>st.get(DB_KEY_COLLECTION));
+    if(stored) return stored;
+    const legacy = loadJSON(LS_COLLECTION, null);
+    if(legacy){
+      await idbRun('readwrite', st=>st.put(legacy, DB_KEY_COLLECTION));
+      localStorage.removeItem(LS_COLLECTION);   // erst nach erfolgreichem Übertragen
+    }
+    return legacy;
+  }catch(e){
+    return loadJSON(LS_COLLECTION, null);       // ohne IndexedDB weiter wie bisher
+  }
+}
+
+async function saveCollection(collection){
+  try{
+    await idbRun('readwrite', st=>collection ? st.put(collection, DB_KEY_COLLECTION) : st.delete(DB_KEY_COLLECTION));
+  }catch(e){
+    if(!collection){ localStorage.removeItem(LS_COLLECTION); return; }
+    try{ localStorage.setItem(LS_COLLECTION, JSON.stringify(collection)); }
+    catch(e2){ throw new Error('Auf diesem Gerät ist nicht genug Speicher frei, um die Lieder zu speichern.'); }
+  }
+}
+
+// Bittet iOS, die Daten bei Speicherknappheit nicht automatisch zu löschen
+function requestPersistentStorage(){
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
+}
+
 function cleanLyrics(text){
   return text
     .replace(/\r\n/g,'\n')
@@ -174,6 +235,10 @@ function sortSongs(arr){
 
 function songSubline(s){
   return [s.performer, s.year].filter(Boolean).join(' · ');
+}
+
+function listSubline(s){
+  return [songSubline(s), s.scores && s.scores.length ? '♪ Noten' : ''].filter(Boolean).join(' · ');
 }
 
 function formatDate(value){
@@ -210,6 +275,9 @@ function parseCollection(text){
       year: str(s.year),
       lyrics: cleanLyrics(str(s.lyrics))
     };
+    const scores = (Array.isArray(s.scores) ? s.scores : [])
+      .filter(x=>typeof x==='string' && /^data:image\/(gif|png|jpeg|webp);base64,/.test(x));
+    if(scores.length) songs[id].scores = scores;
   });
   if(Object.keys(songs).length===0) throw new Error('Die Datei enthält keine Lieder.');
   const lists = (Array.isArray(data.lists) ? data.lists : [])
@@ -419,7 +487,7 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete}
             <li className="song-item" key={s.id} onClick={()=>onOpenSong(s.id)}>
               <div className="title">
                 <span className="song-name">{s.title}</span>
-                {songSubline(s) && <span className="artist">{songSubline(s)}</span>}
+                {listSubline(s) && <span className="artist">{listSubline(s)}</span>}
               </div>
               {list.own ? <React.Fragment>
                 <button className="reorder-btn" title="Nach oben" disabled={i===0}
@@ -460,6 +528,37 @@ function SongMeta({song}){
 }
 
 const SECTION_LABEL = /^(strophe|vers|verse|refrain|chorus|pre-?chorus|bridge|intro|outro|tag|ende|schluss|coda|zwischenteil|interlude)(\s*\d+)?(\s*\([^)]*\))?\s*:?$/i;
+
+function Scores({scores, onOpen}){
+  if(!scores || !scores.length) return null;
+  return (
+    <div className="scores">
+      {scores.map((src,i)=><img key={i} src={src} alt={`Noten, Seite ${i+1}`} onClick={onOpen} />)}
+    </div>
+  );
+}
+
+// Noten bildschirmfüllend, mit Zoomstufen (Pinch-Zoom von iOS geht zusätzlich)
+const SCORE_ZOOMS = [1, 1.5, 2, 3];
+function ScoreViewer({scores, title, onClose}){
+  const [zoom,setZoom] = useState(0);
+  return (
+    <div className="score-viewer">
+      <div className="score-bar">
+        <button className="icon-btn" title="Schließen" onClick={onClose}>&#10005;</button>
+        <span className="label">{title}</span>
+        <button className="size-btn" title="Verkleinern" disabled={zoom===0} onClick={()=>setZoom(z=>Math.max(0,z-1))}>&minus;</button>
+        <button className="size-btn" title="Vergrößern" disabled={zoom===SCORE_ZOOMS.length-1}
+          onClick={()=>setZoom(z=>Math.min(SCORE_ZOOMS.length-1,z+1))}>+</button>
+      </div>
+      <div className="score-scroll">
+        <div style={{width: (SCORE_ZOOMS[zoom]*100)+'%'}}>
+          {scores.map((src,i)=><img key={i} src={src} alt={`Noten, Seite ${i+1}`} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Lyrics({text}){
   if(!text) return <div className="lyrics-view lyrics-empty">(kein Text hinterlegt)</div>;
@@ -531,6 +630,8 @@ function ListChooser({song, myLists, onToggle, onCreate, onClose}){
 
 function SongView({song, myLists, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
+  const [showScores,setShowScores] = useState(false);
+  const hasScores = !!(song.scores && song.scores.length);
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
   return (
     <React.Fragment>
@@ -542,8 +643,10 @@ function SongView({song, myLists, onBack, fontIndex, onFontChange, onToggleList,
           <button className="btn btn-secondary" onClick={()=>setShowChooser(true)}>+ Zu Liste hinzufügen</button>
           {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
         </div>
-        <Lyrics text={song.lyrics} />
+        <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
+        {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
       </div>
+      {showScores && <ScoreViewer scores={song.scores} title={song.title} onClose={()=>setShowScores(false)} />}
       {showChooser && <ListChooser song={song} myLists={myLists}
         onToggle={listId=>onToggleList(listId, song.id)}
         onCreate={name=>onCreateListWithSong(name, song.id)}
@@ -566,7 +669,8 @@ function PrintView({list, songs, onBack, fontIndex, onFontChange}){
         {orderedSongs.map(s=>(
           <div className="song-print" key={s.id}>
             <SongMeta song={s} />
-            <Lyrics text={s.lyrics} />
+            <Scores scores={s.scores} onOpen={()=>{}} />
+            {(s.lyrics || !(s.scores && s.scores.length)) && <Lyrics text={s.lyrics} />}
           </div>
         ))}
       </div>
@@ -575,7 +679,7 @@ function PrintView({list, songs, onBack, fontIndex, onFontChange}){
 }
 
 function App(){
-  const [collection,setCollection] = useState(()=>loadJSON(LS_COLLECTION, null));
+  const [collection,setCollection] = useState(undefined);   // undefined = wird noch geladen
   const [myLists,setMyLists] = useState(()=>loadJSON(LS_MY_LISTS, []));
   const [fontIndex,setFontIndex] = useState(()=>{
     const i = loadJSON(LS_FONT_SIZE, DEFAULT_FONT_INDEX);
@@ -588,9 +692,11 @@ function App(){
   const [importError,setImportError] = useState('');
 
   useEffect(()=>{
-    if(collection) localStorage.setItem(LS_COLLECTION, JSON.stringify(collection));
-    else localStorage.removeItem(LS_COLLECTION);
-  },[collection]);
+    loadCollection().then(c=>{
+      setCollection(c || null);
+      if(c) requestPersistentStorage();
+    });
+  },[]);
   useEffect(()=>{ localStorage.setItem(LS_MY_LISTS, JSON.stringify(myLists)); },[myLists]);
   useEffect(()=>{ try{ localStorage.setItem(LS_FONT_SIZE, JSON.stringify(fontIndex)); }catch(e){} },[fontIndex]);
 
@@ -616,14 +722,23 @@ function App(){
       setImportError(e.message || 'Import fehlgeschlagen.');
     }
   }
-  function confirmImport(){
-    setCollection({...pendingImport, importedAt: new Date().toISOString()});
-    LS_LEGACY.forEach(k=>localStorage.removeItem(k));
+  async function confirmImport(){
+    const next = {...pendingImport, importedAt: new Date().toISOString()};
     setPendingImport(null);
+    try{
+      await saveCollection(next);   // erst speichern, dann anzeigen – bei vollem Speicher bleibt der alte Stand
+    }catch(e){
+      setImportError(e.message || 'Die Lieder konnten nicht gespeichert werden.');
+      return;
+    }
+    setCollection(next);
+    LS_LEGACY.forEach(k=>localStorage.removeItem(k));
+    requestPersistentStorage();
     goHome();
   }
-  function clearAll(){
+  async function clearAll(){
     // Eigene Listen bleiben bewusst erhalten (nur Verweise, füllen sich beim nächsten Import)
+    try{ await saveCollection(null); }catch(e){}
     setCollection(null);
     LS_LEGACY.forEach(k=>localStorage.removeItem(k));
     goHome();
@@ -647,6 +762,10 @@ function App(){
   function deleteMyList(){
     setMyLists(prev=>prev.filter(l=>l.id!==activeListId));
     goHome();
+  }
+
+  if(collection===undefined){
+    return <React.Fragment><Header title="Lyrics-Liste" /><div className="loading">Lieder werden geladen…</div></React.Fragment>;
   }
 
   let view;

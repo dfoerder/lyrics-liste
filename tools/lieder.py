@@ -11,10 +11,12 @@ Befehle:
   entfernen     Lied löschen (auch aus allen Listen)
   liste         Lieder einer Liste hinzufügen/entfernen, Liste löschen
   uebersicht    Alle Lieder und Listen (ohne Text)
+  noten         Notenbilder (GIF/PNG/JPEG) an ein Lied hängen oder entfernen
   vorschau      Formatierte Texte als HTML im Browser öffnen
   export        Datei für den Versand erzeugen (privat/versand/…)
 """
 import argparse
+import base64
 import datetime
 import html
 import json
@@ -302,6 +304,34 @@ def stanza_sizes(lyrics):
     return [sum(1 for l in b.split('\n') if l.strip() and normalize_label(l) != l) for b in blocks]
 
 
+IMAGE_TYPES = [(b'GIF87a', 'image/gif'), (b'GIF89a', 'image/gif'), (b'\x89PNG', 'image/png'),
+               (b'\xff\xd8\xff', 'image/jpeg')]
+
+
+def read_score(path):
+    """Notenbild unverändert als data-URI einlesen (Taizé: nur Originalfassung erlaubt)."""
+    p = Path(path).expanduser()
+    try:
+        raw = p.read_bytes()
+    except OSError as err:
+        raise Fehler(f'Notenbild nicht lesbar: {err}')
+    mime = next((m for sig, m in IMAGE_TYPES if raw.startswith(sig)), None)
+    if not mime:
+        raise Fehler(f'{p.name} ist kein GIF-, PNG- oder JPEG-Bild.')
+    if len(raw) > 1_000_000:
+        print(f'WARNUNG: {p.name} ist {len(raw) // 1024} KB groß – die Lieder-Datei wird dadurch deutlich größer.')
+    return f'data:{mime};base64,' + base64.b64encode(raw).decode('ascii')
+
+
+def scores_info(song):
+    """z.B. '1 Seite, 42 KB' – ohne Bildinhalt."""
+    scores = song.get('scores') or []
+    if not scores:
+        return ''
+    size = sum(len(x) * 3 // 4 for x in scores) // 1024
+    return f'{len(scores)} {"Seite" if len(scores) == 1 else "Seiten"}, {size} KB'
+
+
 def read_input(args):
     if args.text_datei:
         try:
@@ -337,6 +367,9 @@ def cmd_hinzufuegen(args, data):
     pick = lambda value, field: value.strip() if value is not None else keep.get(field, '')
     song = {'id': song_id, 'title': args.titel.strip(), 'writers': pick(args.songwriter, 'writers'),
             'performer': pick(args.interpret, 'performer'), 'year': pick(args.jahr, 'year'), 'lyrics': lyrics}
+    scores = [read_score(f) for f in args.noten] if args.noten else keep.get('scores', [])
+    if scores:
+        song['scores'] = scores
 
     total, sections = describe(lyrics)
     status = 'Probelauf – nichts gespeichert' if args.probelauf else ('aktualisiert' if existing else 'neu')
@@ -363,6 +396,8 @@ def cmd_hinzufuegen(args, data):
     if rep['sonstige']:
         removed.append(f'{rep["sonstige"]} sonstige (Seitenzahlen, Steuerzeilen)')
     print('Entfernt: ' + (', '.join(removed) if removed else 'nichts'))
+    if song.get('scores'):
+        print(f'Noten: {scores_info(song)}' + (' (neu)' if args.noten else ' (beibehalten)'))
     for l in rep['fusszeilen']:
         print(f'  Fußzeile: {l[:100]}')
     h = rep['hinweise']
@@ -454,6 +489,19 @@ def cmd_liste(args, data):
     return True
 
 
+def cmd_noten(args, data):
+    s = require_song(data, args.id)
+    if args.entfernen:
+        s.pop('scores', None)
+        print(f'Noten entfernt: {song_line(s)}')
+        return True
+    if not args.bilder:
+        raise Fehler('Bitte mindestens ein Notenbild angeben (oder --entfernen).')
+    s['scores'] = [read_score(f) for f in args.bilder]
+    print(f'Noten gesetzt: {song_line(s)} – {scores_info(s)}')
+    return True
+
+
 def cmd_uebersicht(args, data):
     print(f'{lieder(len(data["songs"]))}, {len(data["lists"])} Listen (Stand {data.get("created", "?")})')
     for s in sorted(data['songs'], key=lambda s: s['title'].casefold()):
@@ -462,6 +510,7 @@ def cmd_uebersicht(args, data):
         lists = [l['name'] for l in data['lists'] if s['id'] in l['songIds']]
         print(f'  [{s["id"]}] {song_line(s)} | {s.get("writers") or "Songwriter fehlt"} | '
               f'{total} Zeilen in {stanzas} {"Strophe" if stanzas == 1 else "Strophen"}'
+              + (f' | Noten: {scores_info(s)}' if s.get('scores') else '')
               + (f' | Listen: {", ".join(lists)}' if lists else ''))
     for l in data['lists']:
         print(f'Liste "{l["name"]}": {lieder(len(l["songIds"]))}')
@@ -482,16 +531,18 @@ def cmd_vorschau(args, data):
             else:
                 body.append(f'<div class="line">{html.escape(l)}</div>')
         meta = ' · '.join(x for x in (s.get('performer'), s.get('year')) if x)
+        images = ''.join(f'<img src="{src}" alt="Noten">' for src in s.get('scores') or [])
         parts.append(f'<section><h2>{html.escape(s["title"])}</h2>'
                      f'<div class="meta">{html.escape(meta)}</div>'
                      f'<div class="meta small">{"Songwriter: " + html.escape(s["writers"]) if s.get("writers") else ""}</div>'
-                     f'<div class="lyrics">{"".join(body)}</div></section>')
+                     f'{images}<div class="lyrics">{"".join(body)}</div></section>')
     page = ('<!DOCTYPE html><html lang="de"><meta charset="utf-8"><title>Vorschau</title><style>'
             'body{font-family:-apple-system,sans-serif;background:#f4f6f7;color:#20313a;max-width:640px;margin:0 auto;padding:1rem}'
             'section{background:#fff;border:1px solid #dfe4e6;border-radius:.7rem;padding:1rem 1.2rem;margin-bottom:1rem}'
             'h2{margin:0 0 .15rem}.meta{color:#8b9aa2;font-size:.9rem}.small{font-size:.8rem;margin-bottom:1rem}'
             '.lyrics{font-size:1.08rem;line-height:1.55}.line{padding-left:1em;text-indent:-1em}.gap{height:.9em}'
             '.label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#2a6a7a}'
+            'img{display:block;width:100%;height:auto;border:1px solid #dfe4e6;border-radius:.4rem;margin-bottom:.8rem}'
             '</style>' + ''.join(parts) + '</html>')
     out = args.datei.parent / 'vorschau.html'
     out.write_text(page, encoding='utf-8')
@@ -505,12 +556,12 @@ def validate(data):
     ids = set()
     for s in data['songs']:
         if not s.get('id') or not s.get('title'):
-            problems.append(f'Lied ohne id oder Titel: {s}')
+            problems.append(f'Lied ohne id oder Titel: {s.get("title") or s.get("id") or "?"}')
         if s.get('id') in ids:
             problems.append(f'Doppelte id: {s["id"]}')
         ids.add(s.get('id'))
-        if not s.get('lyrics'):
-            problems.append(f'{song_line(s)} hat keinen Text')
+        if not s.get('lyrics') and not s.get('scores'):
+            problems.append(f'{song_line(s)} hat weder Text noch Noten')
     for l in data['lists']:
         for i in l['songIds']:
             if i not in ids:
@@ -557,7 +608,7 @@ def cmd_export(args, data):
     out = dict(data, created=today())
     target.write_text(json.dumps(out, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
-    print(f'Export: {target}')
+    print(f'Export: {target} ({target.stat().st_size // 1024} KB)')
     print(f'Inhalt: {lieder(len(data["songs"]))}, {len(data["lists"])} Listen, Stand {today()}')
     if previous:
         old = json.loads(previous[-1].read_text(encoding='utf-8'))
@@ -591,6 +642,8 @@ def main(argv=None):
     a.add_argument('--liste', action='append', help='in diese Liste aufnehmen (mehrfach möglich)')
     a.add_argument('--ersetzen', action='store_true', help='vorhandenes Lied mit gleicher id überschreiben')
     a.add_argument('--probelauf', action='store_true', help='nur zeigen, was passieren würde')
+    a.add_argument('--noten', action='append', metavar='BILD',
+                   help='Notenbild (GIF/PNG/JPEG) anhängen, mehrfach für mehrere Seiten')
     a.add_argument('--titelzeile-behalten', action='store_true',
                    help='erste Zeile nicht als Titelzeile entfernen, auch wenn sie dem Titel gleicht')
     a.add_argument('--ohne-version', action='store_true',
@@ -613,6 +666,11 @@ def main(argv=None):
     l.add_argument('--entfernen', nargs='+', metavar='ID')
     l.add_argument('--loeschen', action='store_true', help='ganze Liste löschen')
 
+    n = sub.add_parser('noten', help='Notenbilder eines Liedes setzen oder entfernen')
+    n.add_argument('id')
+    n.add_argument('bilder', nargs='*', metavar='BILD')
+    n.add_argument('--entfernen', action='store_true', help='Noten des Liedes entfernen')
+
     sub.add_parser('uebersicht', help='alle Lieder und Listen ohne Text')
     v = sub.add_parser('vorschau', help='formatierte Texte im Browser ansehen')
     v.add_argument('ids', nargs='*')
@@ -620,7 +678,7 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
-                'liste': cmd_liste, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
+                'liste': cmd_liste, 'noten': cmd_noten, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
     try:
         data = load(args.datei)
         if commands[args.befehl](args, data):

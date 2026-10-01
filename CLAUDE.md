@@ -32,20 +32,27 @@ Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
 `{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
-performer, year, lyrics}]}` — `lists` optional. Format-Spezifikation für Claude
+performer, year, lyrics, scores?}]}` — `lists` optional. `scores` = optionale Liste von
+Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet. Format-Spezifikation für Claude
 steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **Lieder-Sammlung pflegen (auf dem Mac):**
 - `tools/lieder.py` — CLI für `privat/familien-lieder.json`: Text aus der
-  Zwischenablage formatieren und speichern, Angaben/Listen ändern, Vorschau,
-  Export nach `privat/versand/`. Gibt bewusst nie Songtexte aus.
+  Zwischenablage formatieren und speichern, Notenbilder anhängen (`--noten`,
+  `noten`), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
+  bewusst nie Songtexte oder Bildinhalte aus.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
 - `lieder-prompt.md` — Alternative für ein Claude-Projekt in der Claude-App.
 
 **Daten:**
-- `localStorage` `lyrics-sammlung` — die zuletzt importierte Sammlung:
-  `{created, importedAt, lists:[...], songs:{ [id]: {...} }}`
+- **IndexedDB** `lyrics-liste` / Store `daten` / Schlüssel `sammlung` — die zuletzt
+  importierte Sammlung: `{created, importedAt, lists:[...], songs:{ [id]: {...} }}`.
+  IndexedDB statt localStorage wegen der Notenbilder (localStorage auf iOS ~5 MB).
+  Laden/Speichern asynchron (`loadCollection`/`saveCollection`); beim Import wird
+  erst gespeichert, dann angezeigt. Ältere Stände unter `localStorage`
+  `lyrics-sammlung` werden beim ersten Laden übernommen und danach dort gelöscht.
+  `navigator.storage.persist()` wird angefragt.
 - `localStorage` `lyrics-eigene-listen` — eigene Listen: `[{id, name, songIds}]`
   (ids beginnen mit `meine-`, eigene Reihenfolge). Werden weder vom Import noch vom
   Mülleimer gelöscht; ids fehlender Lieder bleiben stehen und erscheinen wieder,
@@ -64,6 +71,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Entfernen/Umbenennen/Löschen
 - `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
+- `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
+  Zoomstufen
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter;
   „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
   herausnehmen, neue Liste mit dem Lied anlegen)

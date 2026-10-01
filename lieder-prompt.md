@@ -67,6 +67,8 @@ FELDER:
   Nur bei Texten ohne bestimmte Aufnahme (z.B. Choral aus dem Liederbuch) bleiben
   performer und year leer, wenn ich das ausdrücklich sage.
 - lyrics: der Songtext, den ich dir gebe.
+- scores: optional, Notenbilder als data-URI. Werden nur über das Skript
+  tools/lieder.py eingebettet – bestehende scores unverändert übernehmen.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds
   muss in songs existieren.
 

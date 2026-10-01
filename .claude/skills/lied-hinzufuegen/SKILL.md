@@ -100,6 +100,39 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
    Erwähne am Ende, dass `/lieder-verschicken` die neue Datei an die Familie bringt,
    wenn er fertig ist.
 
+## Noten (z.B. Taizé-Gesänge)
+
+Für mehrstimmige Lieder kann ein Lied zusätzlich Notenbilder haben (GIF, PNG oder
+JPEG). Die App zeigt sie über dem Text an, in Vollbild mit Zoom und im Druck. Der
+Text bleibt trotzdem wichtig: Der Nutzer will bei Liedern mit Noten **Noten und Text**.
+Wer keine Noten liest, kann so die Schriftgröße einstellen.
+
+1. **Bild finden:** Der Nutzer lädt die Noten selbst herunter, zum Beispiel aus dem
+   offiziellen Download von Taizé. Sagt er nicht genau, wo die Datei liegt, schau
+   nach den neuesten Bildern im Download-Ordner:
+   ```bash
+   ls -lt ~/Downloads/*.gif ~/Downloads/*.png ~/Downloads/*.jpg 2>/dev/null | head -5
+   ```
+   Nenn ihm Dateiname und Zeitpunkt und lass dir bestätigen, dass es die richtige
+   Datei ist. Bei mehreren Seiten auch die Reihenfolge. Auf Wunsch zeigt
+   `open -a Preview <datei>` das Bild.
+2. **Unverändert übernehmen:** Das Skript bettet das Bild Byte für Byte ein. Schneide,
+   skaliere oder bearbeite es nicht. Taizé erlaubt nur die Wiedergabe in der
+   Originalfassung, und das gilt auch sonst für fremde Noten.
+3. **Neues Lied mit Noten:** wie gewohnt mit Text aus der Zwischenablage, plus
+   `--noten <datei>` (mehrfach für mehrere Seiten):
+   ```bash
+   python3 tools/lieder.py hinzufuegen --titel "…" --interpret "Taizé Community" --jahr 1986 --noten ~/Downloads/xyz.gif --liste "Morgenandacht"
+   ```
+   Bei Taizé-Gesängen beginnt der Text oft mit dem Titel, dann mit
+   `--titelzeile-behalten` (siehe unten).
+4. **Vorhandenes Lied ergänzen:** `python3 tools/lieder.py noten <id> ~/Downloads/xyz.gif`.
+   Der Text bleibt dabei unverändert.
+
+Wird beim Ersetzen des Textes (`--ersetzen`) keine neue `--noten`-Datei angegeben,
+bleiben vorhandene Noten erhalten. Die Ausgabe zeigt nur Seitenzahl und Größe, nie den
+Bildinhalt.
+
 ## Weitere Befehle
 
 | Wunsch | Befehl |
@@ -109,7 +142,8 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
 | Lied löschen | `entfernen <id>`. Das Lied verschwindet auch aus allen Listen. Vorher kurz bestätigen lassen. |
 | Listen pflegen | `liste "Advent" --hinzufuegen <id> <id>`, `--entfernen <id>`, `--loeschen` |
 | Überblick (ohne Texte) | `uebersicht`. Zeigt auch die ids. |
-| Formatierten Text ansehen | `vorschau [<id> …]`. Öffnet eine HTML-Seite im Browser. |
+| Formatierten Text ansehen | `vorschau [<id> …]`. Öffnet eine HTML-Seite im Browser, mit Noten. |
+| Noten an vorhandenes Lied hängen | `noten <id> BILD [BILD …]`. Ersetzt vorhandene Noten, der Text bleibt. `noten <id> --entfernen` nimmt sie wieder weg. |
 
 Die id wird aus Titel und Interpret gebildet. Meldet das Skript, dass es die id schon
 gibt, frag nach, ob der Nutzer das vorhandene Lied aktualisieren will (`--ersetzen`) oder
