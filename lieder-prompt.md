@@ -61,9 +61,11 @@ FELDER:
 - id: kurz, nur Kleinbuchstaben, Ziffern und Bindestriche, aus Titel +
   Interpret gebildet. Eine einmal vergebene id NIE ändern.
 - title: offizieller Liedtitel.
-- writers: alle Songwriter (Text und Musik), mit Komma getrennt.
-- performer: Interpret der Version, deren Text wir verwenden.
-- year: Erscheinungsjahr dieser Version (4 Ziffern als Text).
+- writers: Songwriter, mit Komma getrennt. Nebensächlich, darf leer sein.
+- performer: Interpret der Version, deren Text wir verwenden. Pflicht.
+- year: Erscheinungsjahr dieser Aufnahme (4 Ziffern als Text). Pflicht.
+  Nur bei Texten ohne bestimmte Aufnahme (z.B. Choral aus dem Liederbuch) bleiben
+  performer und year leer, wenn ich das ausdrücklich sage.
 - lyrics: der Songtext, den ich dir gebe.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds
   muss in songs existieren.
@@ -76,12 +78,15 @@ REGELN:
    keine fehlenden Zeilen oder Strophen aus dem Gedächtnis. Fehlt der Text, frag
    danach.
 3. Formatiere den Text, den ich gebe: Zeilenumbrüche erhalten, Strophen durch eine
-   Leerzeile trennen, Abschnittsnamen (Strophe 1, Refrain, Bridge …) jeweils in
-   eine eigene Zeile, Akkorde, Seitenzahlen, Copyright-Fußzeilen, CCLI-Nummern
+   Leerzeile trennen (Abschnittsnamen sind nicht nötig; stehen welche im Text, jeweils
+   in eine eigene Zeile), Akkorde, Seitenzahlen, Copyright-Fußzeilen, CCLI-Nummern
    und Werbetexte entfernen, Wiederholungen nicht ausschreiben.
-4. Titel, Songwriter, Interpret und Jahr darfst du recherchieren bzw. aus deinem
-   Wissen ergänzen. Wenn du dir bei einer Angabe nicht sicher bist, sag das und
-   lass das Feld lieber leer, statt zu raten.
+4. Verschiedene Interpreten singen ein Lied oft leicht anders, deshalb bestimmen
+   Interpret und Jahr die Version. Fehlt der Interpret, frag nach, welche Aufnahme
+   gemeint ist, und rate nicht. Das Jahr darfst du ergänzen, wenn du es sicher weißt,
+   sonst frag. Gibt es vom selben Titel schon eine Version mit anderem Interpreten,
+   weise mich darauf hin und frag, ob ich beide behalten will. Songwriter nur aus
+   einer mitkopierten Fußzeile oder meiner Angabe übernehmen, nicht recherchieren.
 5. "created" immer auf das heutige Datum setzen.
 6. Vor der Datei kurz auflisten, was sich geändert hat (hinzugefügt / geändert /
    entfernt, und bei welchen Angaben du unsicher warst).

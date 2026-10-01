@@ -164,6 +164,12 @@ def comparable(text):
     return re.sub(r'[^a-z0-9äöüß]+', '', text.casefold())
 
 
+def same_title(a, b):
+    """Gleicher Liedtitel, Zusätze in Klammern wie "(Live)" ignoriert."""
+    strip = lambda t: comparable(re.sub(r'[\(\[].*?[\)\]]', '', t))
+    return strip(a) == strip(b)
+
+
 def is_title_line(line, title):
     strip = lambda t: comparable(re.sub(r'[\(\[].*?[\)\]]', '', t))
     return comparable(line) == comparable(title) or strip(line) == strip(title)
@@ -298,7 +304,10 @@ def stanza_sizes(lyrics):
 
 def read_input(args):
     if args.text_datei:
-        return Path(args.text_datei).read_text(encoding='utf-8')
+        try:
+            return Path(args.text_datei).read_text(encoding='utf-8')
+        except OSError as err:
+            raise Fehler(f'Textdatei nicht lesbar: {err}')
     res = subprocess.run(['pbpaste'], capture_output=True, env=UTF8_ENV)
     return res.stdout.decode('utf-8', errors='replace')
 
@@ -362,9 +371,24 @@ def cmd_hinzufuegen(args, data):
         print('WARNUNG: sehr kurzer Text – war wirklich der Liedtext in der Zwischenablage?')
     if duplicate:
         print(f'WARNUNG: identischer Text wie bei {song_line(duplicate)} – vermutlich wurde der neue Text nicht kopiert.')
-    if not song['writers'] or not song['performer'] or not song['year']:
-        missing = [n for n, k in (('Songwriter', 'writers'), ('Interpret', 'performer'), ('Jahr', 'year')) if not song[k]]
-        print('Leer: ' + ', '.join(missing))
+    others = [s for s in data['songs'] if s['id'] != song_id and same_title(s['title'], song['title'])]
+    for s in others:
+        print(f'ANDERE VERSION in der Sammlung: {song_line(s)} (id {s["id"]})')
+    if song['year'] and not re.fullmatch(r'\d{4}', song['year']):
+        print(f'WARNUNG: Jahr "{song["year"]}" ist keine vierstellige Jahreszahl.')
+    if not song['writers']:
+        print('Songwriter: leer (nur aus Fußzeile oder Angabe des Nutzers übernehmen)')
+
+    # Interpret und Jahr bestimmen die Version und damit den Text – deshalb Pflicht
+    missing = [n for n, k in (('Interpret', 'performer'), ('Jahr', 'year')) if not song[k]]
+    if missing and not args.ohne_version:
+        message = (f'{" und ".join(missing)} {"fehlt" if len(missing) == 1 else "fehlen"}. '
+                   'Sie bestimmen die Version und damit den Text. Mit --interpret/--jahr angeben '
+                   '(oder --ohne-version für Texte ohne bestimmte Aufnahme, z.B. aus dem Liederbuch).')
+        if args.probelauf:
+            print('PFLICHT: ' + message)
+        else:
+            raise Fehler(message)
 
     if args.probelauf:
         return False
@@ -566,6 +590,8 @@ def main(argv=None):
     a.add_argument('--liste', action='append', help='in diese Liste aufnehmen (mehrfach möglich)')
     a.add_argument('--ersetzen', action='store_true', help='vorhandenes Lied mit gleicher id überschreiben')
     a.add_argument('--probelauf', action='store_true', help='nur zeigen, was passieren würde')
+    a.add_argument('--ohne-version', action='store_true',
+                   help='Interpret/Jahr dürfen fehlen (Text ohne bestimmte Aufnahme, z.B. Liederbuch)')
     a.add_argument('--text-datei', help='Text aus Datei statt Zwischenablage')
 
     b = sub.add_parser('bearbeiten', help='Angaben eines Liedes ändern')

@@ -1,6 +1,6 @@
 ---
 name: lied-hinzufuegen
-description: Nimmt ein Lied in die private Lieder-Sammlung der Lyrics-Liste auf. Holt den Songtext aus der Zwischenablage, formatiert ihn (Akkorde, CCLI- und Copyright-Fußzeilen raus, Abschnitte wie Strophe/Refrain einheitlich), ergänzt Titel, Songwriter, Interpret und Jahr und speichert alles in privat/familien-lieder.json. Verwende diesen Skill immer, wenn der Nutzer ein Lied oder einen Songtext hinzufügen, aufnehmen, aktualisieren oder entfernen will, Liedangaben korrigieren möchte oder Lieder in Listen wie „Advent“ oder „Sonntagsandacht“ einsortieren will. Das gilt auch, wenn er nur „neues Lied: …“, „hab den Text kopiert“ oder „nimm Oceans von Hillsong auf“ schreibt.
+description: Nimmt ein Lied in die private Lieder-Sammlung der Lyrics-Liste auf. Holt den Songtext aus der Zwischenablage, formatiert ihn (Akkorde, CCLI- und Copyright-Fußzeilen raus, Abschnitte wie Strophe/Refrain einheitlich), erfasst die Version (Interpret und Jahr) und speichert alles in privat/familien-lieder.json. Verwende diesen Skill immer, wenn der Nutzer ein Lied oder einen Songtext hinzufügen, aufnehmen, aktualisieren oder entfernen will, Liedangaben korrigieren möchte oder Lieder in Listen wie „Advent“ oder „Sonntagsandacht“ einsortieren will. Das gilt auch, wenn er nur „neues Lied: …“, „hab den Text kopiert“ oder „nimm Oceans von Hillsong auf“ schreibt.
 ---
 
 # Lied hinzufügen
@@ -33,9 +33,18 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
 
 ## Ablauf
 
-1. **Klären, welches Lied gemeint ist.** Du brauchst den Titel. Wenn es mehrere
-   bekannte Versionen gibt, brauchst du auch den Interpreten der Version, deren Text
-   kopiert wurde. Ist das unklar, frag kurz nach.
+1. **Klären, welche Version gemeint ist.** Du brauchst Titel, Interpret und Jahr.
+   Verschiedene Interpreten singen ein Lied oft leicht anders, und der Nutzer passt den
+   Text an die Version an, die er singen will. Deshalb sind Interpret und Jahr Pflicht.
+   Das Skript verweigert das Speichern ohne sie.
+   - **Interpret fehlt:** Frag nach, welche Aufnahme gemeint ist. Rate nicht, auch
+     nicht, wenn eine Version am bekanntesten ist. Du kannst bekannte Versionen als
+     Auswahl anbieten.
+   - **Nur das Jahr fehlt:** Schlag das Erscheinungsjahr dieser Aufnahme vor, wenn du
+     es sicher weißt, und lass es den Nutzer bestätigen. Sonst frag nach.
+   - **Ohne bestimmte Aufnahme:** Stammt der Text aus einem Liederbuch, zum Beispiel
+     bei einem Choral, sagt der Nutzer das. Dann speicherst du mit `--ohne-version`,
+     und Interpret und Jahr bleiben leer.
 
 2. **Probelauf:**
    ```bash
@@ -48,6 +57,12 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
      kopiert hat.
    - **Fußzeilen, die eigentlich Liedzeilen sind:** Das ist selten, aber möglich. Dann
      nachfragen.
+   - **„ANDERE VERSION in der Sammlung: …“:** Vom selben Lied gibt es schon eine
+     Version mit anderem Interpreten. Sag das dem Nutzer und frag, ob er beide Versionen
+     behalten will oder die alte ersetzt werden soll. Zum Ersetzen speicherst du die
+     neue Version und entfernst danach die alte mit `entfernen <id>`. Listen-Einträge
+     der alten Version musst du dabei auf die neue übertragen.
+   - **„WARNUNG: Jahr … ist keine vierstellige Jahreszahl“:** Korrigieren.
    - **„HINWEIS: Ein Block hat mehr als 12 Zeilen …“:** Dem Text fehlen vermutlich die
      Leerzeilen zwischen den Strophen. Sag es dem Nutzer. Er kann den Text im Editor
      mit Leerzeilen versehen, neu kopieren, und dann ersetzt du den Text.
@@ -59,16 +74,16 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
 
 3. **Angaben bestimmen:**
    - **Titel:** offizieller Titel, wie er im Probelauf passt.
-   - **Songwriter:** Die Angabe aus der Fußzeile ist die verlässlichste Quelle. Sie
-     stammt aus der Lizenzdatenbank, also nimm sie so, wie sie dort steht. Sonst nimm
-     dein Wissen oder eine Websuche.
    - **Interpret:** die Band oder der Künstler der Version, die der Nutzer meint.
-   - **Jahr:** Erscheinungsjahr *dieser Version*. Das ©-Jahr aus der Fußzeile ist das
-     Entstehungsjahr des Liedes und kann davon abweichen. Bei traditionellen Chorälen
-     ohne bestimmte Aufnahme ist das Jahr des Textes sinnvoll.
+   - **Jahr:** Erscheinungsjahr *dieser Aufnahme*, bei einem Live-Album also das Jahr
+     des Live-Albums. Das ©-Jahr aus der Fußzeile ist das Entstehungsjahr des Liedes und
+     ist dafür nicht geeignet.
+   - **Songwriter:** nebensächlich. Übernimm ihn nur aus der Fußzeile, dort steht er
+     verlässlich aus der Lizenzdatenbank, oder wenn der Nutzer ihn angibt. Recherchiere
+     ihn nicht. Fehlt er, bleibt er leer, und das ist in Ordnung.
 
-   Wenn du dir bei einer Angabe nicht sicher bist, lass sie leer und sag das. Eine leere
-   Angabe schadet nicht, eine falsche landet bei der ganzen Familie.
+   Eine falsche Angabe landet bei der ganzen Familie. Rate deshalb nicht, sondern frag
+   lieber nach.
 
 4. **Speichern** mit denselben Angaben ohne `--probelauf`. Mit `--liste` nimmst du das
    Lied gleich in Listen auf. Die Option geht mehrfach, und eine fehlende Liste wird
@@ -77,8 +92,8 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
    python3 tools/lieder.py hinzufuegen --titel "…" --songwriter "A, B" --interpret "…" --jahr 2013 --liste "Advent"
    ```
 
-5. **Kurz berichten:** Titel, Interpret, Jahr, Songwriter, Strophen und Zeilenzahl,
-   was entfernt wurde und welche Angaben unsicher oder leer sind. Biete die Vorschau an.
+5. **Kurz berichten:** Titel, Interpret, Jahr, Songwriter (falls vorhanden), Strophen
+   und Zeilenzahl, was entfernt wurde und ob es andere Versionen in der Sammlung gibt. Biete die Vorschau an.
    Erwähne am Ende, dass `/lieder-verschicken` die neue Datei an die Familie bringt,
    wenn er fertig ist.
 
@@ -86,7 +101,7 @@ kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
 
 | Wunsch | Befehl |
 |---|---|
-| Text eines vorhandenen Liedes erneuern (neu kopiert) | `hinzufuegen --titel … --interpret … --ersetzen`. Nicht mitgegebene Angaben bleiben erhalten. |
+| Text eines vorhandenen Liedes erneuern (neu kopiert) | `hinzufuegen --titel … --interpret … --ersetzen`. Nicht mitgegebene Angaben bleiben erhalten. Bei Liedern ohne Interpret zusätzlich `--ohne-version`. |
 | Nur Angaben ändern | `bearbeiten <id> --songwriter … --interpret … --jahr … --titel …` |
 | Lied löschen | `entfernen <id>`. Das Lied verschwindet auch aus allen Listen. Vorher kurz bestätigen lassen. |
 | Listen pflegen | `liste "Advent" --hinzufuegen <id> <id>`, `--entfernen <id>`, `--loeschen` |
