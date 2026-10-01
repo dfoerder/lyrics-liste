@@ -64,7 +64,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Entfernen/Umbenennen/Löschen
 - `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
-- `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter
+- `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter;
+  „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
+  herausnehmen, neue Liste mit dem Lied anlegen)
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
 

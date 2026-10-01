@@ -87,6 +87,14 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .picker-item:hover{background:var(--accent-bg)}
 .picker-item .artist{font-size:.78rem;color:var(--muted)}
 .picker-empty{padding:.8rem;color:var(--muted);font-size:.9rem}
+.picker-item.choice{display:flex;align-items:center;gap:.6rem}
+.picker-item .check{width:1.3rem;height:1.3rem;border:1.5px solid var(--border2);border-radius:.35rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;color:#fff}
+.picker-item.on .check{background:var(--accent);border-color:var(--accent)}
+.picker-item.new-list{color:var(--accent-dark);font-weight:600}
+.new-list-row{display:flex;gap:.5rem;padding:.6rem;border-bottom:1px solid var(--border)}
+.new-list-row input{flex:1;min-width:0;padding:.5rem .6rem;border:1px solid var(--border2);border-radius:.5rem;font-family:inherit;font-size:1rem;color:var(--text);background:var(--bg-card)}
+.song-lists{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:-.3rem 0 1rem}
+.song-lists .in{font-size:.8rem;color:var(--muted)}
 
 .lyrics-view{font-size:calc(1.08rem * var(--lyrics-scale, 1));line-height:1.55;padding:.2rem 0}
 .size-btn{width:2.2rem;height:2.2rem;display:flex;align-items:center;justify-content:center;border-radius:.5rem;color:var(--text2);font-weight:600;line-height:1}
@@ -477,15 +485,69 @@ function FontSizeButtons({fontIndex, onChange}){
   );
 }
 
-function SongView({song, onBack, fontIndex, onFontChange}){
+// Ein Lied in eigene Listen legen/herausnehmen, optional neue Liste anlegen
+function ListChooser({song, myLists, onToggle, onCreate, onClose}){
+  const [creating,setCreating] = useState(myLists.length===0);
+  const [name,setName] = useState('');
+  const inputRef = useRef(null);
+  useEffect(()=>{ if(creating && inputRef.current) inputRef.current.focus(); },[creating]);
+  function create(){
+    const n = name.trim();
+    if(!n) return;
+    onCreate(n);
+    setName(''); setCreating(false);
+  }
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Zu Liste hinzufügen</h3>
+        <p style={{marginBottom:'.7rem'}}>„{song.title}" in deine eigenen Listen legen. Nochmal antippen nimmt es wieder heraus.</p>
+        <div className="picker-list">
+          {myLists.map(l=>{
+            const on = l.songIds.includes(song.id);
+            return (
+              <div key={l.id} className={'picker-item choice' + (on ? ' on' : '')} onClick={()=>onToggle(l.id)}>
+                <span className="check">{on ? '✓' : ''}</span>
+                <span>{l.name}</span>
+              </div>
+            );
+          })}
+          {creating
+            ? <div className="new-list-row">
+                <input ref={inputRef} value={name} placeholder="Name der neuen Liste"
+                  onChange={e=>setName(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==='Enter') create(); if(e.key==='Escape') setCreating(false); }} />
+                <button className="btn btn-primary" disabled={!name.trim()} onClick={create}>Anlegen</button>
+              </div>
+            : <div className="picker-item new-list" onClick={()=>setCreating(true)}>+ Neue Liste</div>}
+        </div>
+        <div className="dialog-actions" style={{marginTop:'1rem'}}>
+          <button className="btn btn-primary" onClick={onClose}>Fertig</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SongView({song, myLists, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
+  const [showChooser,setShowChooser] = useState(false);
+  const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
   return (
     <React.Fragment>
       <Header title={song.title} onBack={onBack}
         right={<FontSizeButtons fontIndex={fontIndex} onChange={onFontChange} />} />
       <div className="main" style={{'--lyrics-scale': FONT_SCALES[fontIndex]}}>
         <SongMeta song={song} />
+        <div className="song-lists no-print">
+          <button className="btn btn-secondary" onClick={()=>setShowChooser(true)}>+ Zu Liste hinzufügen</button>
+          {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
+        </div>
         <Lyrics text={song.lyrics} />
       </div>
+      {showChooser && <ListChooser song={song} myLists={myLists}
+        onToggle={listId=>onToggleList(listId, song.id)}
+        onCreate={name=>onCreateListWithSong(name, song.id)}
+        onClose={()=>setShowChooser(false)} />}
     </React.Fragment>
   );
 }
@@ -572,6 +634,13 @@ function App(){
     setActiveListId(l.id);
     setPhase('list');
   }
+  function toggleSongInList(listId, songId){
+    setMyLists(prev=>prev.map(l=>l.id!==listId ? l : {...l,
+      songIds: l.songIds.includes(songId) ? l.songIds.filter(x=>x!==songId) : [...l.songIds, songId]}));
+  }
+  function createMyListWithSong(name, songId){
+    setMyLists(prev=>[...prev, {id: uid(), name, songIds: [songId]}]);
+  }
   function updateMyList({id, name, songIds}){
     setMyLists(prev=>prev.map(l=>l.id===id ? {id, name, songIds} : l));
   }
@@ -590,8 +659,10 @@ function App(){
       onDelete={deleteMyList} />;
   }
   else if(phase==='song' && activeSong){
-    view = <SongView song={activeSong} onBack={()=>{ setActiveSongId(null); setPhase('list'); }}
-      fontIndex={fontIndex} onFontChange={changeFont} />;
+    view = <SongView song={activeSong} myLists={myLists}
+      onBack={()=>{ setActiveSongId(null); setPhase('list'); }}
+      fontIndex={fontIndex} onFontChange={changeFont}
+      onToggleList={toggleSongInList} onCreateListWithSong={createMyListWithSong} />;
   }
   else if(phase==='print' && activeList){
     view = <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')}
