@@ -323,7 +323,8 @@ def cmd_hinzufuegen(args, data):
     if re.fullmatch(r'\s*https?://\S+\s*', raw):
         raise Fehler('In der Zwischenablage liegt nur ein Link statt eines Liedtexts.')
 
-    lyrics, rep = clean_lyrics(raw, args.titel)
+    # Bei Kanons/Taizé-Gesängen ist die erste Zeile oft gleich dem Titel, gehört aber zum Text
+    lyrics, rep = clean_lyrics(raw, '' if args.titelzeile_behalten else args.titel)
     song_id = args.id or slugify(args.titel + (' ' + args.interpret if args.interpret else ''))
     existing = find_song(data, song_id)
     if existing and not args.ersetzen:
@@ -590,6 +591,8 @@ def main(argv=None):
     a.add_argument('--liste', action='append', help='in diese Liste aufnehmen (mehrfach möglich)')
     a.add_argument('--ersetzen', action='store_true', help='vorhandenes Lied mit gleicher id überschreiben')
     a.add_argument('--probelauf', action='store_true', help='nur zeigen, was passieren würde')
+    a.add_argument('--titelzeile-behalten', action='store_true',
+                   help='erste Zeile nicht als Titelzeile entfernen, auch wenn sie dem Titel gleicht')
     a.add_argument('--ohne-version', action='store_true',
                    help='Interpret/Jahr dürfen fehlen (Text ohne bestimmte Aufnahme, z.B. Liederbuch)')
     a.add_argument('--text-datei', help='Text aus Datei statt Zwischenablage')

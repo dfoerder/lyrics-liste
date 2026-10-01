@@ -120,7 +120,10 @@ Zur Einordnung, falls der Nutzer fragt oder etwas unerwartet aussieht:
 - **Fußzeilen:** Alles ab der ersten CCLI- oder ©-Markierung in der zweiten Hälfte des
   Textes wird abgeschnitten. Dazu kommen Zeilen wie „Text:“ oder „Melodie:“ und eine
   SongSelect-Zeile „A | B | C“ mit den Songwritern.
-- **Titelzeile:** Die erste Zeile wird entfernt, wenn sie dem Titel entspricht.
+- **Titelzeile:** Die erste Zeile wird entfernt, wenn sie dem Titel entspricht. Meldet
+  der Probelauf „Entfernt: Titelzeile“, prüf kurz, ob das stimmt. Bei Kanons und
+  Taizé-Gesängen ist die erste Liedzeile oft gleich dem Titel. Dann mit
+  `--titelzeile-behalten` speichern.
 - **Abschnittsnamen:** Sie stehen in einer eigenen Zeile und werden einheitlich deutsch
   benannt: Verse → Strophe, Chorus → Refrain, Ending/Tag → Schluss. Bridge, Pre-Chorus
   und Intro bleiben.
