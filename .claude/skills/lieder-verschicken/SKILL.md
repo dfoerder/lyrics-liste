@@ -32,7 +32,7 @@ Deshalb wird immer die komplette Sammlung verschickt, nie nur die neuen Lieder.
    Neue Lieder für unsere Andachten (Stand 26.09.2026) 🎵
    Neu: Oceans (Hillsong United), Großer Gott, wir loben dich
    Geändert: Unter deinem Dach
-   So geht's: Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts 📥 antippen und die Datei auswählen.
+   So geht's: Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts 📥 antippen – die Datei steht meist ganz oben unter „Zuletzt verwendet“.
    App: https://dfoerder.github.io/lyrics-liste/
    ```
    - **Erster Versand:** Lass „Neu:“ weg und erkläre kurz, dass man die App über
