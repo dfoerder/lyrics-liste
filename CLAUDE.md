@@ -50,6 +50,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   (ids beginnen mit `meine-`, eigene Reihenfolge). Werden weder vom Import noch vom
   Mülleimer gelöscht; ids fehlender Lieder bleiben stehen und erscheinen wieder,
   sobald das Lied zurückkommt.
+- `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
+  Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
 - Alte Schlüssel `lyrics-lists` / `lyrics-songs` (v1) werden beim Import bzw.
   beim Entfernen gelöscht.
 
@@ -63,6 +65,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter
+- `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
 
 ## Copyright / CCLI
