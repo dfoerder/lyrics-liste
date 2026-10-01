@@ -118,9 +118,11 @@ Wer keine Noten liest, kann so die Schriftgröße einstellen.
    Datei ist. Bei mehreren Seiten auch die Reihenfolge. Auf Wunsch zeigt
    `open -a Preview <datei>` das Bild.
 2. **Unverändert übernehmen:** Das Skript bettet Bilder Byte für Byte ein. PDFs rendert
-   es Seite für Seite als PNG mit 144 dpi, als ganze Seite ohne Zuschnitt
-   (`tools/pdf_seiten.swift`, macOS-Bordmittel). Die erste Umwandlung dauert ein paar
-   Sekunden. Schneide, skaliere oder bearbeite die Noten nicht. Taizé erlaubt nur die Wiedergabe in der
+   es Seite für Seite als PNG mit 144 dpi (`tools/pdf_seiten.swift`, macOS-Bordmittel)
+   und schneidet dabei nur den leeren weißen Rand ab, bis auf etwa 4 mm. So stehen die
+   Noten auf dem iPhone nicht klein in einer großen weißen Seite. Die erste Umwandlung
+   dauert ein paar Sekunden. Darüber hinaus schneidest, skalierst oder bearbeitest du
+   die Noten nicht. Taizé erlaubt nur die Wiedergabe in der
    Originalfassung, und das gilt auch sonst für fremde Noten.
 3. **Neues Lied mit Noten:** wie gewohnt mit Text aus der Zwischenablage, plus
    `--noten <datei>` (mehrfach für mehrere Seiten):
