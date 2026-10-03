@@ -134,6 +134,22 @@ Wer keine Noten liest, kann so die Schriftgröße einstellen.
 4. **Vorhandenes Lied ergänzen:** `python3 tools/lieder.py noten <id> ~/Downloads/xyz.gif`.
    Der Text bleibt dabei unverändert.
 
+## Übungsstimmen (MIDI)
+
+Ein Lied kann pro Stimme eine MIDI-Datei haben. Die App zeigt dann einen Übungsplayer:
+eigene Stimme laut, die anderen leise oder aus, Tempo einstellbar. Die MIDI-Dateien
+liegen meist neben dem Notenscan in `privat/scans/` und enden auf `-s`, `-a`, `-t`, `-b`
+(Sopran, Alt, Tenor, Bass):
+
+```bash
+python3 tools/lieder.py stimmen <id> privat/scans/<name>-s.mid privat/scans/<name>-a.mid privat/scans/<name>-t.mid privat/scans/<name>-b.mid
+```
+
+Andere Namen (z.B. „Bariton“) ergeben sich aus dem Teil nach dem letzten Bindestrich
+oder werden mit `--name` je Datei gesetzt. `stimmen <id> --entfernen` nimmt sie wieder
+weg. Beim Ersetzen des Textes bleiben vorhandene Stimmen erhalten. MIDI-Dateien sind
+winzig (etwa 0,5 KB pro Stimme), die Lieder-Datei wird dadurch kaum größer.
+
 Wird beim Ersetzen des Textes (`--ersetzen`) keine neue `--noten`-Datei angegeben,
 bleiben vorhandene Noten erhalten. Die Ausgabe zeigt nur Seitenzahl und Größe, nie den
 Bildinhalt.

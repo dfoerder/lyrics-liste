@@ -69,6 +69,8 @@ FELDER:
 - lyrics: der Songtext, den ich dir gebe.
 - scores: optional, Notenbilder als data-URI. Werden nur über das Skript
   tools/lieder.py eingebettet – bestehende scores unverändert übernehmen.
+- voices: optional, Übungsstimmen [{name, midi}] mit MIDI als data-URI. Werden nur
+  über das Skript tools/lieder.py eingebettet – bestehende voices unverändert übernehmen.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds
   muss in songs existieren.
 

@@ -130,6 +130,22 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .score-scroll img{display:block;width:100%;height:auto;border-bottom:1px solid var(--border)}
 .loading{text-align:center;color:var(--muted);padding:3rem 1rem}
 
+.voice-player{background:var(--bg-card);border:1px solid var(--border);border-radius:.7rem;box-shadow:var(--shadow);padding:.8rem .9rem;margin-bottom:1rem}
+.vp-top{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
+.vp-play{min-width:9.5rem}
+.vp-bar{font-size:.85rem;color:var(--text2);font-variant-numeric:tabular-nums}
+.vp-link{font-size:.82rem;color:var(--accent);text-decoration:underline}
+.vp-pos{width:100%;margin:.7rem 0 .5rem;accent-color:var(--accent)}
+.vp-chips{display:flex;gap:.4rem;flex-wrap:wrap}
+.vp-chip{padding:.4rem .65rem;border-radius:999px;border:1px solid var(--border2);background:var(--bg);color:var(--text2);font-size:.85rem;font-weight:600}
+.vp-chip.small{padding:.25rem .7rem;font-size:.8rem}
+.vp-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.vp-line{display:flex;align-items:center;gap:.6rem;margin-top:.7rem}
+.vp-label{font-size:.8rem;color:var(--muted);min-width:6.5rem}
+.vp-tempo{flex:1;min-width:0;accent-color:var(--accent)}
+.vp-value{font-size:.85rem;color:var(--text2);width:2.8rem;text-align:right;font-variant-numeric:tabular-nums}
+.vp-loop{display:flex;align-items:center;gap:.4rem;margin-top:.6rem;font-size:.85rem;color:var(--text2)}
+
 @media print{
   .header,.toolbar,.no-print{display:none!important}
   .main{max-width:none;padding:0}
@@ -240,7 +256,7 @@ function songSubline(s){
 }
 
 function listSubline(s){
-  return [songSubline(s), s.scores && s.scores.length ? '♪ Noten' : ''].filter(Boolean).join(' · ');
+  return [songSubline(s), s.scores && s.scores.length ? '♪ Noten' : '', s.voices && s.voices.length ? '♫ Stimmen' : ''].filter(Boolean).join(' · ');
 }
 
 function formatDate(value){
@@ -280,6 +296,10 @@ function parseCollection(text){
     const scores = (Array.isArray(s.scores) ? s.scores : [])
       .filter(x=>typeof x==='string' && /^data:image\/(gif|png|jpeg|webp);base64,/.test(x));
     if(scores.length) songs[id].scores = scores;
+    const voices = (Array.isArray(s.voices) ? s.voices : [])
+      .filter(v=>v && str(v.name) && typeof v.midi==='string' && /^data:audio\/(midi|mid|x-midi);base64,/.test(v.midi))
+      .map(v=>({name: str(v.name), midi: v.midi}));
+    if(voices.length) songs[id].voices = voices;
   });
   if(Object.keys(songs).length===0) throw new Error('Die Datei enthält keine Lieder.');
   const lists = (Array.isArray(data.lists) ? data.lists : [])
@@ -630,6 +650,253 @@ function ListChooser({song, myLists, onToggle, onCreate, onClose}){
   );
 }
 
+// ---------------------------------------------------------------- Stimmen (MIDI-Übungsplayer)
+// Lieder können je Stimme eine MIDI-Datei haben (song.voices = [{name, midi: data-URI}]).
+// Der Klang wird mit Web Audio selbst erzeugt – keine Bibliothek, keine Klangdateien.
+const LS_VOICE = 'lyrics-stimme';   // zuletzt gewählte Stimme (Name), pro Gerät
+
+function dataUriBytes(uri){
+  const bin = atob(uri.slice(uri.indexOf(',')+1));
+  const out = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Liest Noten (in Viertelschlägen), Grundtempo und Taktart aus einer MIDI-Datei.
+// Es zählt das erste Tempo der Datei; Tempowechsel werden ignoriert.
+function parseMidi(bytes){
+  let p = 0;
+  const u32 = ()=>{ const v=((bytes[p]<<24)|(bytes[p+1]<<16)|(bytes[p+2]<<8)|bytes[p+3])>>>0; p+=4; return v; };
+  const u16 = ()=>{ const v=(bytes[p]<<8)|bytes[p+1]; p+=2; return v; };
+  const vlq = ()=>{ let v=0,b; do{ b=bytes[p++]; v=(v<<7)|(b&0x7f); }while(b&0x80 && p<bytes.length); return v; };
+  const id4 = ()=>String.fromCharCode(bytes[p],bytes[p+1],bytes[p+2],bytes[p+3]);
+  if(id4()!=='MThd') throw new Error('keine MIDI-Datei');
+  p+=4; const hlen=u32(), hstart=p; u16(); const tracks=u16(), div=u16(); p=hstart+hlen;
+  if(div & 0x8000) throw new Error('SMPTE-Zeit wird nicht unterstützt');
+  let tempo=500000, tempoSet=false, num=4, den=4;
+  const notes=[];
+  for(let t=0; t<tracks && p+8<=bytes.length; t++){
+    const id=id4(); p+=4; const len=u32(), end=Math.min(p+len, bytes.length);
+    if(id!=='MTrk'){ p=end; continue; }
+    let tick=0, status=0; const open={};
+    while(p<end){
+      tick += vlq();
+      const b = bytes[p];
+      if(b===0xFF){
+        p++; const type=bytes[p++], l=vlq();
+        if(type===0x51 && !tempoSet){ tempo=(bytes[p]<<16)|(bytes[p+1]<<8)|bytes[p+2]; tempoSet=true; }
+        if(type===0x58){ num=bytes[p]; den=Math.pow(2, bytes[p+1]); }
+        p+=l; continue;
+      }
+      if(b===0xF0 || b===0xF7){ p++; p+=vlq(); continue; }
+      if(b & 0x80){ status=b; p++; }
+      const hi=status & 0xF0;
+      const d1=bytes[p++], d2=(hi===0xC0 || hi===0xD0) ? 0 : bytes[p++];
+      if(hi===0x90 && d2>0) (open[d1]=open[d1]||[]).push(tick);
+      else if(hi===0x80 || (hi===0x90 && d2===0)){
+        const start=(open[d1]||[]).shift();
+        if(start!==undefined && tick>start) notes.push({beat:start/div, dur:(tick-start)/div, midi:d1});
+      }
+    }
+    p=end;
+  }
+  notes.sort((a,b)=>a.beat-b.beat);
+  const length = notes.reduce((m,n)=>Math.max(m, n.beat+n.dur), 0);
+  return {notes, bpm: 60000000/tempo, beatsPerBar: num*4/den, length};
+}
+
+const parsedVoicesCache = new WeakMap();
+function parsedVoices(voices){
+  if(!parsedVoicesCache.has(voices)){
+    const tracks=[];
+    voices.forEach(v=>{
+      try{ const m=parseMidi(dataUriBytes(v.midi)); if(m.notes.length) tracks.push({name:v.name, ...m}); }
+      catch(e){ console.warn('Stimme', v.name, 'nicht lesbar:', e.message); }
+    });
+    parsedVoicesCache.set(voices, tracks);
+  }
+  return parsedVoicesCache.get(voices);
+}
+
+let audioCtx = null, silentAudio = null;
+function getAudio(){
+  // iPhone: Ton auch bei eingeschaltetem Stummschalter (Safari 16.4+) …
+  try{ if(navigator.audioSession) navigator.audioSession.type='playback'; }catch(e){}
+  if(!audioCtx){ const AC = window.AudioContext || window.webkitAudioContext; audioCtx = new AC(); }
+  if(audioCtx.state==='suspended') audioCtx.resume();
+  return audioCtx;
+}
+// … und für ältere iOS-Versionen: ein stummes <audio> im Hintergrund schaltet Web Audio
+// auf den Medienkanal, der den Stummschalter nicht beachtet.
+function silentWavUri(){
+  const n=800, buf=new Uint8Array(44+n), dv=new DataView(buf.buffer);
+  const s=(o,t)=>{ for(let i=0;i<t.length;i++) buf[o+i]=t.charCodeAt(i); };
+  s(0,'RIFF'); dv.setUint32(4,36+n,true); s(8,'WAVEfmt '); dv.setUint32(16,16,true);
+  dv.setUint16(20,1,true); dv.setUint16(22,1,true); dv.setUint32(24,8000,true); dv.setUint32(28,8000,true);
+  dv.setUint16(32,1,true); dv.setUint16(34,8,true); s(36,'data'); dv.setUint32(40,n,true); buf.fill(128,44);
+  let bin=''; buf.forEach(b=>bin+=String.fromCharCode(b));
+  return 'data:audio/wav;base64,'+btoa(bin);
+}
+function setSilentAudio(on){
+  try{
+    if(on){
+      if(!silentAudio){ silentAudio=new Audio(silentWavUri()); silentAudio.loop=true; silentAudio.setAttribute('playsinline',''); }
+      const p=silentAudio.play(); if(p && p.catch) p.catch(()=>{});
+    } else if(silentAudio) silentAudio.pause();
+  }catch(e){}
+}
+
+const midiFreq = m => 440*Math.pow(2,(m-69)/12);
+
+// Ein Ton: Dreieck + leise Oktave, weich gefiltert, mit sanftem Ein- und Ausklang
+function playTone(ctx, dest, midi, t0, dur, nodes){
+  const f=midiFreq(midi);
+  const o1=ctx.createOscillator(), o2=ctx.createOscillator(), g2=ctx.createGain(), env=ctx.createGain(), lp=ctx.createBiquadFilter();
+  o1.type='triangle'; o1.frequency.value=f;
+  o2.type='sine'; o2.frequency.value=f*2; g2.gain.value=0.2;
+  lp.type='lowpass'; lp.frequency.value=Math.min(5000, f*6);
+  o1.connect(env); o2.connect(g2); g2.connect(env); env.connect(lp); lp.connect(dest);
+  const a=0.04, r=Math.min(0.12, dur*0.3);
+  env.gain.setValueAtTime(0,t0);
+  env.gain.linearRampToValueAtTime(1,t0+a);
+  env.gain.setValueAtTime(1,Math.max(t0+a,t0+dur-r));
+  env.gain.linearRampToValueAtTime(0,t0+dur);
+  [o1,o2].forEach(o=>{ o.start(t0); o.stop(t0+dur+0.05); nodes.add(o); o.onended=()=>nodes.delete(o); });
+}
+
+function VoicePlayer({voices}){
+  const tracks = parsedVoices(voices);
+  const [playing,setPlaying] = useState(false);
+  const [focus,setFocus] = useState(()=>{
+    let name=null; try{ name=localStorage.getItem(LS_VOICE); }catch(e){}
+    return Math.max(-1, tracks.findIndex(t=>t.name===name));
+  });
+  const [others,setOthers] = useState('leise');   // 'leise' | 'aus'
+  const [tempo,setTempo] = useState(100);          // Prozent des Originaltempos
+  const [loop,setLoop] = useState(false);
+  const [pos,setPos] = useState(0);                // Position in Schlägen
+  const eng = useRef(null);
+  const settings = useRef({});
+  settings.current = {focus, others, tempo, loop};
+
+  const total = tracks.length ? Math.max(...tracks.map(t=>t.length)) : 0;
+  const baseBpm = tracks.length ? tracks[0].bpm : 100;
+  const bpb = tracks.length ? tracks[0].beatsPerBar : 4;
+
+  function levels(){
+    const {focus, others} = settings.current;
+    return tracks.map((_,i)=> focus<0 || i===focus ? 1 : (others==='leise' ? 0.22 : 0));
+  }
+
+  function stop(resetPos){
+    const e=eng.current; eng.current=null;
+    if(e){
+      clearInterval(e.timer);
+      const now=e.ctx.currentTime;
+      e.master.gain.cancelScheduledValues(now);
+      e.master.gain.setValueAtTime(e.master.gain.value, now);
+      e.master.gain.linearRampToValueAtTime(0, now+0.05);
+      e.nodes.forEach(o=>{ try{ o.stop(now+0.06); }catch(err){} });
+      setTimeout(()=>e.master.disconnect(), 150);
+    }
+    setSilentAudio(false);
+    setPlaying(false);
+    if(resetPos) setPos(0);
+  }
+
+  function start(fromBeat){
+    if(eng.current) stop(false);
+    const ctx=getAudio();
+    setSilentAudio(true);
+    const master=ctx.createGain(); master.gain.value=0.2; master.connect(ctx.destination);
+    const lv=levels();
+    const gains=tracks.map((_,i)=>{ const g=ctx.createGain(); g.gain.value=lv[i]; g.connect(master); return g; });
+    const spb=60/(baseBpm*settings.current.tempo/100);
+    const e={ctx, master, gains, spb, nodes:new Set(), startTime:ctx.currentTime+0.1, startBeat:fromBeat,
+             next: tracks.map(t=>{ const i=t.notes.findIndex(n=>n.beat>=fromBeat-1e-6); return i<0 ? t.notes.length : i; })};
+    const tick=()=>{
+      if(eng.current!==e) return;
+      const nowBeat=e.startBeat+(ctx.currentTime-e.startTime)/e.spb;
+      const horizon=nowBeat+2;
+      tracks.forEach((t,ti)=>{
+        while(e.next[ti]<t.notes.length && t.notes[e.next[ti]].beat<horizon){
+          const n=t.notes[e.next[ti]++];
+          const t0=e.startTime+(n.beat-e.startBeat)*e.spb;
+          playTone(ctx, gains[ti], n.midi, Math.max(t0, ctx.currentTime), Math.max(0.08, n.dur*e.spb-0.03), e.nodes);
+        }
+      });
+      if(nowBeat>=total+0.2){
+        if(settings.current.loop) start(0);
+        else stop(true);
+        return;
+      }
+      setPos(Math.max(0, nowBeat));
+    };
+    e.timer=setInterval(tick, 80);
+    eng.current=e;
+    setPlaying(true);
+    tick();
+  }
+
+  // Lautstärken live anpassen
+  useEffect(()=>{
+    const e=eng.current; if(!e) return;
+    levels().forEach((v,i)=>e.gains[i].gain.setTargetAtTime(v, e.ctx.currentTime, 0.03));
+  }, [focus, others]);
+  // Tempo geändert: an der aktuellen Stelle neu einsetzen
+  useEffect(()=>{ if(eng.current) start(Math.max(0,pos)); }, [tempo]);
+  useEffect(()=>()=>stop(false), []);
+
+  if(!tracks.length) return null;
+
+  function chooseVoice(i){
+    setFocus(i);
+    try{ if(i<0) localStorage.removeItem(LS_VOICE); else localStorage.setItem(LS_VOICE, tracks[i].name); }catch(e){}
+  }
+  function seek(beat){
+    setPos(beat);
+    if(eng.current) start(beat);
+  }
+  const bars=Math.max(1, Math.ceil(total/bpb-1e-6));
+  const bar=Math.min(bars, Math.floor(pos/bpb+1e-6)+1);
+
+  return (
+    <div className="voice-player no-print">
+      <div className="vp-top">
+        <button className="btn btn-primary vp-play" onClick={()=>playing ? stop(false) : start(pos>=total ? 0 : pos)}>
+          {playing ? '■ Stopp' : '▶ Stimmen üben'}
+        </button>
+        <span className="vp-bar">Takt {bar} / {bars}</span>
+        {pos>0 && !playing && <button className="vp-link" onClick={()=>seek(0)}>Zum Anfang</button>}
+      </div>
+      <input className="vp-pos" type="range" min={0} max={Math.max(0,(bars-1)*bpb)} step={bpb}
+        value={Math.min(Math.floor(pos/bpb+1e-6)*bpb, (bars-1)*bpb)} aria-label="Takt"
+        onChange={ev=>seek(Number(ev.target.value))} />
+      <div className="vp-chips" role="group" aria-label="Stimme">
+        <button className={'vp-chip'+(focus<0?' on':'')} onClick={()=>chooseVoice(-1)}>Alle</button>
+        {tracks.map((t,i)=>
+          <button key={i} className={'vp-chip'+(focus===i?' on':'')} onClick={()=>chooseVoice(i)}>{t.name}</button>)}
+      </div>
+      {focus>=0 && (
+        <div className="vp-line">
+          <span className="vp-label">Andere Stimmen</span>
+          <div className="vp-chips">
+            <button className={'vp-chip small'+(others==='leise'?' on':'')} onClick={()=>setOthers('leise')}>leise</button>
+            <button className={'vp-chip small'+(others==='aus'?' on':'')} onClick={()=>setOthers('aus')}>aus</button>
+          </div>
+        </div>
+      )}
+      <div className="vp-line">
+        <span className="vp-label">Tempo</span>
+        <input className="vp-tempo" type="range" min={50} max={130} step={5} value={tempo}
+          aria-label="Tempo" onChange={ev=>setTempo(Number(ev.target.value))} />
+        <span className="vp-value">{tempo}%</span>
+      </div>
+      <label className="vp-loop"><input type="checkbox" checked={loop} onChange={ev=>setLoop(ev.target.checked)} /> Wiederholen</label>
+    </div>
+  );
+}
+
 function SongView({song, myLists, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
   const [showScores,setShowScores] = useState(false);
@@ -645,6 +912,7 @@ function SongView({song, myLists, onBack, fontIndex, onFontChange, onToggleList,
           <button className="btn btn-secondary" onClick={()=>setShowChooser(true)}>+ Zu Liste hinzufügen</button>
           {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
         </div>
+        {song.voices && song.voices.length>0 && <VoicePlayer key={song.id} voices={song.voices} />}
         <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
         {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
       </div>

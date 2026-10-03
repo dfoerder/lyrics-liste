@@ -12,6 +12,7 @@ Befehle:
   liste         Lieder einer Liste hinzufügen/entfernen, Liste löschen
   uebersicht    Alle Lieder und Listen (ohne Text)
   noten         Noten (GIF/PNG/JPEG/PDF) an ein Lied hängen oder entfernen
+  stimmen       MIDI-Dateien je Stimme (Sopran, Alt, …) zum Üben anhängen oder entfernen
   vorschau      Formatierte Texte als HTML im Browser öffnen
   export        Datei für den Versand erzeugen (privat/versand/…)
 """
@@ -396,6 +397,8 @@ def cmd_hinzufuegen(args, data):
     scores = [u for f in args.noten for u in read_scores(f)] if args.noten else keep.get('scores', [])
     if scores:
         song['scores'] = scores
+    if keep.get('voices'):
+        song['voices'] = keep['voices']
 
     total, sections = describe(lyrics)
     status = 'Probelauf – nichts gespeichert' if args.probelauf else ('aktualisiert' if existing else 'neu')
@@ -424,6 +427,8 @@ def cmd_hinzufuegen(args, data):
     print('Entfernt: ' + (', '.join(removed) if removed else 'nichts'))
     if song.get('scores'):
         print(f'Noten: {scores_info(song)}' + (' (neu)' if args.noten else ' (beibehalten)'))
+    if song.get('voices'):
+        print(f'Stimmen: {voices_info(song)} (beibehalten)')
     for l in rep['fusszeilen']:
         print(f'  Fußzeile: {l[:100]}')
     h = rep['hinweise']
@@ -515,6 +520,58 @@ def cmd_liste(args, data):
     return True
 
 
+VOICE_SUFFIXES = {'s': 'Sopran', 'a': 'Alt', 't': 'Tenor', 'b': 'Bass'}
+VOICE_ORDER = ['Sopran', 'Alt', 'Tenor', 'Bass']
+
+
+def voice_name(path):
+    """Stimmname aus dem Dateinamen: …-s.mid → Sopran, -a Alt, -t Tenor, -b Bass,
+    sonst der Teil nach dem letzten Bindestrich (z.B. …-bariton.mid → Bariton)."""
+    tail = path.stem.rsplit('-', 1)[-1]
+    return VOICE_SUFFIXES.get(tail.lower(), tail[:1].upper() + tail[1:])
+
+
+def read_voice(path, name=None):
+    p = Path(path).expanduser()
+    try:
+        raw = p.read_bytes()
+    except OSError as err:
+        raise Fehler(f'MIDI-Datei nicht lesbar: {err}')
+    if not raw.startswith(b'MThd'):
+        raise Fehler(f'{p.name} ist keine MIDI-Datei.')
+    return {'name': name or voice_name(p), 'midi': 'data:audio/midi;base64,' + base64.b64encode(raw).decode('ascii')}
+
+
+def voices_info(song):
+    """z.B. 'Sopran, Alt, Tenor, Bass (3 KB)' – ohne Inhalt."""
+    voices = song.get('voices') or []
+    if not voices:
+        return ''
+    size = max(1, sum(len(v['midi']) * 3 // 4 for v in voices) // 1024)
+    return f'{", ".join(v["name"] for v in voices)} ({size} KB)'
+
+
+def cmd_stimmen(args, data):
+    s = require_song(data, args.id)
+    if args.entfernen:
+        s.pop('voices', None)
+        print(f'Stimmen entfernt: {song_line(s)}')
+        return True
+    if not args.dateien:
+        raise Fehler('Bitte mindestens eine MIDI-Datei angeben (oder --entfernen).')
+    if args.name and len(args.name) != len(args.dateien):
+        raise Fehler('--name muss so oft angegeben werden, wie es MIDI-Dateien gibt.')
+    voices = [read_voice(f, args.name[i] if args.name else None) for i, f in enumerate(args.dateien)]
+    names = [v['name'] for v in voices]
+    if len(set(names)) != len(names):
+        raise Fehler(f'Stimmnamen doppelt: {", ".join(names)} – mit --name eindeutig benennen.')
+    order = {n: i for i, n in enumerate(VOICE_ORDER)}
+    voices.sort(key=lambda v: order.get(v['name'], len(order)))
+    s['voices'] = voices
+    print(f'Stimmen gesetzt: {song_line(s)} – {voices_info(s)}')
+    return True
+
+
 def cmd_noten(args, data):
     s = require_song(data, args.id)
     if args.entfernen:
@@ -537,6 +594,7 @@ def cmd_uebersicht(args, data):
         print(f'  [{s["id"]}] {song_line(s)} | {s.get("writers") or "Songwriter fehlt"} | '
               f'{total} Zeilen in {stanzas} {"Strophe" if stanzas == 1 else "Strophen"}'
               + (f' | Noten: {scores_info(s)}' if s.get('scores') else '')
+              + (f' | Stimmen: {voices_info(s)}' if s.get('voices') else '')
               + (f' | Listen: {", ".join(lists)}' if lists else ''))
     for l in data['lists']:
         print(f'Liste "{l["name"]}": {lieder(len(l["songIds"]))}')
@@ -698,6 +756,13 @@ def main(argv=None):
     n.add_argument('bilder', nargs='*', metavar='BILD')
     n.add_argument('--entfernen', action='store_true', help='Noten des Liedes entfernen')
 
+    m = sub.add_parser('stimmen', help='MIDI-Dateien je Stimme setzen oder entfernen')
+    m.add_argument('id')
+    m.add_argument('dateien', nargs='*', metavar='MIDI',
+                   help='MIDI-Dateien; Stimme aus dem Namensende: -s Sopran, -a Alt, -t Tenor, -b Bass')
+    m.add_argument('--name', action='append', help='Stimmname je Datei in gleicher Reihenfolge (statt aus dem Dateinamen)')
+    m.add_argument('--entfernen', action='store_true', help='Stimmen des Liedes entfernen')
+
     sub.add_parser('uebersicht', help='alle Lieder und Listen ohne Text')
     v = sub.add_parser('vorschau', help='formatierte Texte im Browser ansehen')
     v.add_argument('ids', nargs='*')
@@ -705,7 +770,7 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
-                'liste': cmd_liste, 'noten': cmd_noten, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
+                'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
     try:
         data = load(args.datei)
         if commands[args.befehl](args, data):

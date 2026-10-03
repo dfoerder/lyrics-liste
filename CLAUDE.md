@@ -32,15 +32,19 @@ Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
 `{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
-performer, year, lyrics, scores?}]}` — `lists` optional. `scores` = optionale Liste von
-Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet. Format-Spezifikation für Claude
+performer, year, lyrics, scores?, voices?}]}` — `lists` optional. `scores` = optionale Liste von
+Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
+`voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
+(`data:audio/midi;base64,…`), Reihenfolge Sopran, Alt, Tenor, Bass. Ältere App-Stände
+ignorieren das Feld, deshalb bleibt `version: 2`. Format-Spezifikation für Claude
 steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **Lieder-Sammlung pflegen (auf dem Mac):**
 - `tools/lieder.py` — CLI für `privat/familien-lieder.json`: Text aus der
   Zwischenablage formatieren und speichern, Noten anhängen (`--noten`, `noten`;
   GIF/PNG/JPEG unverändert, PDF seitenweise als PNG über `tools/pdf_seiten.swift`,
-  dabei wird nur leerer weißer Rand abgeschnitten), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
+  dabei wird nur leerer weißer Rand abgeschnitten), Übungsstimmen als MIDI anhängen
+  (`stimmen`; Stimme aus dem Dateiende `-s/-a/-t/-b`), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
   bewusst nie Songtexte oder Bildinhalte aus.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
@@ -58,6 +62,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   (ids beginnen mit `meine-`, eigene Reihenfolge). Werden weder vom Import noch vom
   Mülleimer gelöscht; ids fehlender Lieder bleiben stehen und erscheinen wieder,
   sobald das Lied zurückkommt.
+- `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
 - Alte Schlüssel `lyrics-lists` / `lyrics-songs` (v1) werden beim Import bzw.
@@ -72,6 +77,12 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Entfernen/Umbenennen/Löschen
 - `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
+- `VoicePlayer` — Übungsplayer für `song.voices`: liest die MIDI-Dateien selbst
+  (`parseMidi`, nur erstes Tempo) und erzeugt den Klang mit Web Audio (`playTone`,
+  keine Bibliothek, keine Klangdateien). Stimme wählen (eigene laut, andere leise/aus),
+  Tempo 50–130 %, Takt springen, Wiederholen. Geplant wird laufend 2 Schläge voraus.
+  iPhone-Stummschalter: `navigator.audioSession.type='playback'` plus stummes
+  `<audio>` im Hintergrund (`setSilentAudio`).
 - `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
   Zoomstufen
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
