@@ -146,7 +146,17 @@ python3 tools/lieder.py stimmen <id> privat/scans/<name>-s.mid privat/scans/<nam
 ```
 
 Andere Namen (z.B. „Bariton“) ergeben sich aus dem Teil nach dem letzten Bindestrich
-oder werden mit `--name` je Datei gesetzt. `stimmen <id> --entfernen` nimmt sie wieder
+oder werden mit `--name` je Datei gesetzt.
+
+**Mehrstimmige MIDI-Datei** (alle Stimmen in einer Datei, eine Spur je Stimme, z.B. die
+Taizé-MIDIs in `privat/data/taize/`): mit `--aufteilen` zerlegt das Skript sie in einzelne
+Stimmen. Jede Stimme bekommt die Steuerspur mit Tempo und Takt plus ihre Notenspur, die
+Noten bleiben unverändert. Die Namen kommen aus den Spurnamen: Soprano → Sopran,
+Alto → Alt, Base/Bass → Bass, Voice1 → Stimme 1, Solist bleibt.
+
+```bash
+python3 tools/lieder.py stimmen nada-te-turbe "privat/data/taize/Nada te turbe.mid" --aufteilen
+``` `stimmen <id> --entfernen` nimmt sie wieder
 weg. Beim Ersetzen des Textes bleiben vorhandene Stimmen erhalten. MIDI-Dateien sind
 winzig (etwa 0,5 KB pro Stimme), die Lieder-Datei wird dadurch kaum größer.
 

@@ -531,7 +531,7 @@ def voice_name(path):
     return VOICE_SUFFIXES.get(tail.lower(), tail[:1].upper() + tail[1:])
 
 
-def read_voice(path, name=None):
+def read_midi(path):
     p = Path(path).expanduser()
     try:
         raw = p.read_bytes()
@@ -539,7 +539,84 @@ def read_voice(path, name=None):
         raise Fehler(f'MIDI-Datei nicht lesbar: {err}')
     if not raw.startswith(b'MThd'):
         raise Fehler(f'{p.name} ist keine MIDI-Datei.')
-    return {'name': name or voice_name(p), 'midi': 'data:audio/midi;base64,' + base64.b64encode(raw).decode('ascii')}
+    return p, raw
+
+
+def midi_uri(raw):
+    return 'data:audio/midi;base64,' + base64.b64encode(raw).decode('ascii')
+
+
+def read_voice(path, name=None):
+    p, raw = read_midi(path)
+    return {'name': name or voice_name(p), 'midi': midi_uri(raw)}
+
+
+# Spurnamen in mehrstimmigen MIDI-Dateien (z.B. Taizé „4voix“) → Stimmnamen der App
+TRACK_NAMES = {'soprano': 'Sopran', 'sopran': 'Sopran', 'alto': 'Alt', 'alt': 'Alt', 'tenor': 'Tenor',
+               'bass': 'Bass', 'base': 'Bass', 'basse': 'Bass', 'solist': 'Solist', 'solo': 'Solist'}
+
+
+def split_voices(path):
+    """Mehrstimmige MIDI-Datei (Format 1, eine Spur je Stimme) in einzelne Stimmen aufteilen.
+    Jede Stimme = Steuerspur (Tempo/Takt) + ihre Notenspur, Noten unverändert."""
+    import struct
+    p, raw = read_midi(path)
+    hlen = struct.unpack('>I', raw[4:8])[0]
+    fmt, ntracks, div = struct.unpack('>HHH', raw[8:14])
+    if fmt != 1:
+        raise Fehler(f'{p.name} hat MIDI-Format {fmt} – aufteilen geht nur bei Format 1 (eine Spur je Stimme).')
+    chunks, pos = [], 8 + hlen
+    while pos + 8 <= len(raw) and len(chunks) < ntracks:
+        size = struct.unpack('>I', raw[pos + 4:pos + 8])[0]
+        chunks.append(raw[pos:pos + 8 + size])
+        pos += 8 + size
+
+    def info(chunk):
+        """(Spurname, enthält Noten?) – einfacher Durchlauf durch die Ereignisse."""
+        data, q, status, tname, notes = chunk[8:], 0, 0, '', False
+        def vlq():
+            nonlocal q
+            v = 0
+            while q < len(data):
+                c = data[q]; q += 1; v = (v << 7) | (c & 0x7F)
+                if not c & 0x80:
+                    break
+            return v
+        while q < len(data):
+            vlq()
+            c = data[q]
+            if c == 0xFF:
+                typ = data[q + 1]; q += 2; ln = vlq()
+                if typ == 0x03:
+                    tname = data[q:q + ln].decode('latin-1').strip()
+                q += ln
+                continue
+            if c in (0xF0, 0xF7):
+                q += 1; q += vlq()
+                continue
+            if c & 0x80:
+                status = c; q += 1
+            hi = status & 0xF0
+            d2 = data[q + 1] if hi not in (0xC0, 0xD0) else 0
+            if hi == 0x90 and d2 > 0:
+                notes = True
+            q += 1 if hi in (0xC0, 0xD0) else 2
+        return tname, notes
+
+    conductor = chunks[0]
+    voices = []
+    for i, chunk in enumerate(chunks[1:], 1):
+        tname, notes = info(chunk)
+        if not notes:
+            continue
+        key = tname.lower()
+        m = re.fullmatch(r'voice\s*(\d+)', key)
+        name = TRACK_NAMES.get(key) or (f'Stimme {m.group(1)}' if m else (tname or f'Stimme {i}'))
+        midi = raw[:8 + hlen][:10] + struct.pack('>H', 2) + raw[12:8 + hlen] + conductor + chunk
+        voices.append({'name': name, 'midi': midi_uri(midi)})
+    if len(voices) < 2:
+        raise Fehler(f'{p.name}: nur {len(voices)} Notenspur gefunden – nichts aufzuteilen.')
+    return voices
 
 
 def voices_info(song):
@@ -561,7 +638,12 @@ def cmd_stimmen(args, data):
         raise Fehler('Bitte mindestens eine MIDI-Datei angeben (oder --entfernen).')
     if args.name and len(args.name) != len(args.dateien):
         raise Fehler('--name muss so oft angegeben werden, wie es MIDI-Dateien gibt.')
-    voices = [read_voice(f, args.name[i] if args.name else None) for i, f in enumerate(args.dateien)]
+    if args.aufteilen:
+        if len(args.dateien) != 1:
+            raise Fehler('--aufteilen erwartet genau eine mehrstimmige MIDI-Datei.')
+        voices = split_voices(args.dateien[0])
+    else:
+        voices = [read_voice(f, args.name[i] if args.name else None) for i, f in enumerate(args.dateien)]
     names = [v['name'] for v in voices]
     if len(set(names)) != len(names):
         raise Fehler(f'Stimmnamen doppelt: {", ".join(names)} – mit --name eindeutig benennen.')
@@ -761,6 +843,8 @@ def main(argv=None):
     m.add_argument('dateien', nargs='*', metavar='MIDI',
                    help='MIDI-Dateien; Stimme aus dem Namensende: -s Sopran, -a Alt, -t Tenor, -b Bass')
     m.add_argument('--name', action='append', help='Stimmname je Datei in gleicher Reihenfolge (statt aus dem Dateinamen)')
+    m.add_argument('--aufteilen', action='store_true',
+                   help='eine mehrstimmige MIDI-Datei (eine Spur je Stimme, z.B. Taizé 4voix) in Stimmen aufteilen')
     m.add_argument('--entfernen', action='store_true', help='Stimmen des Liedes entfernen')
 
     sub.add_parser('uebersicht', help='alle Lieder und Listen ohne Text')
