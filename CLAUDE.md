@@ -52,8 +52,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   eins ein. Was schon eingelesen ist, steht in `privat/data-import.json` (Gruppe → id +
   Prüfsummen); `verknuepfen`/`ignorieren` pflegen das. Unterordner `alt`/`mp3` werden
   übergangen.
-- Fehlt die `.mid`: Noten ablesen mit `tools/noten_raster.swift` (Lesehilfe mit
-  Tonhöhen-Raster), Notation in `privat/data/<name>.stimmen`, daraus MIDI mit
+- Fehlt die `.mid`: PDF mit Audiveris (installiert, `-batch -export`) erkennen,
+  `tools/mxl_zu_stimmen.py` repariert typische Erkennungsfehler und meldet unklare Takte
+  als PRÜFEN → `privat/data/<name>.stimmen`; unklare Stellen mit
+  `tools/noten_raster.swift` (Lesehilfe mit Tonhöhen-Raster) nachsehen; MIDI mit
   `tools/midi_schreiben.py`. `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
   rendert kleine Seiten mit mindestens 1100 px Breite.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen

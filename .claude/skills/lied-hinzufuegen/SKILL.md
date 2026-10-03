@@ -54,9 +54,28 @@ merkt sich `privat/data-import.json`, mit Prüfsumme je Datei.
 
 ### MIDI fehlt? Aus den Noten ablesen
 
-Bittet der Nutzer darum, die `.mid` aus den Noten zu erzeugen, und steht kein
-Notenerkennungs-Programm bereit, liest du die Stimmen selbst ab. Bei „Der Mond ist
-aufgegangen“ hat das zuverlässig geklappt:
+Bittet der Nutzer darum, die `.mid` aus den Noten zu erzeugen, nimm den Weg über
+Audiveris. Das Programm ist installiert und erkennt gedruckte Noten. Seine Macken
+repariert der Umwandler, nur die gemeldeten Stellen prüfst du von Hand.
+
+1. **Erkennen** (dauert etwa 6 s pro Seite):
+   ```bash
+   /Applications/Audiveris.app/Contents/MacOS/Audiveris -batch -export -output <tmp-ordner> privat/data/<name>.pdf
+   ```
+2. **Umwandeln:** `python3 tools/mxl_zu_stimmen.py <tmp-ordner>/<name>.mxl privat/data/<name>.stimmen`.
+   Das Skript führt geteilte Takte zusammen und ordnet verirrte Töne zu. Fehlende Pausen
+   richtet es am Rhythmus der anderen Stimmen aus. Was es nicht klären kann, meldet es
+   als `PRÜFEN: Takt N, <Stimme> …`. Meist ist dort ein Ton verloren gegangen, oft bei
+   Sekundabständen zwischen zwei Stimmen.
+3. **Gemeldete Stellen nachsehen** mit dem Raster (siehe unten, ab Schritt 2) und in der
+   `.stimmen`-Datei korrigieren. Nur diese Takte musst du ablesen, nicht das ganze Lied.
+4. **MIDI schreiben:** `python3 tools/midi_schreiben.py privat/data/<name>.stimmen`.
+   Dann wie gewohnt mit dem Scan weiter.
+
+Bei „Der Mond ist aufgegangen“ stimmte das Ergebnis von Audiveris nach der Umwandlung
+mit einer vollständigen Handabschrift überein, bis auf genau eine gemeldete Stelle.
+
+**Ohne Audiveris, oder bei sehr schlechter Erkennung: alles selbst ablesen.**
 
 1. **Bild holen:** Hat die PDF einen eingebetteten Scan, nimm diesen, denn er ist höher
    aufgelöst. Achte auf die Drehung der Seite und richte ihn mit `sips -r 270` o.ä.
