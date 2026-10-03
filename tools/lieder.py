@@ -556,11 +556,12 @@ def cmd_vorschau(args, data):
                 body.append(f'<div class="label">{html.escape(l)}</div>')
             else:
                 body.append(f'<div class="line">{html.escape(l)}</div>')
-        meta = ' · '.join(x for x in (s.get('performer'), s.get('year')) if x)
+        # wie in der App: ohne Interpret steht der Songwriter vorne, ohne Beschriftung
+        meta = ' · '.join(x for x in (s.get('performer') or s.get('writers'), s.get('year')) if x)
         images = ''.join(f'<img src="{src}" alt="Noten">' for src in s.get('scores') or [])
         parts.append(f'<section><h2>{html.escape(s["title"])}</h2>'
                      f'<div class="meta">{html.escape(meta)}</div>'
-                     f'<div class="meta small">{"Songwriter: " + html.escape(s["writers"]) if s.get("writers") else ""}</div>'
+                     f'<div class="meta small">{"Songwriter: " + html.escape(s["writers"]) if s.get("writers") and s.get("performer") else ""}</div>'
                      f'{images}<div class="lyrics">{"".join(body)}</div></section>')
     page = ('<!DOCTYPE html><html lang="de"><meta charset="utf-8"><title>Vorschau</title><style>'
             'body{font-family:-apple-system,sans-serif;background:#f4f6f7;color:#20313a;max-width:640px;margin:0 auto;padding:1rem}'

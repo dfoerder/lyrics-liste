@@ -233,8 +233,10 @@ function sortSongs(arr){
   return arr.slice().sort((a,b)=>a.title.localeCompare(b.title,'de'));
 }
 
+// Mit Interpret: „Interpret · Jahr“ (Songwriter separat). Ohne Interpret (z.B. Choräle):
+// „Songwriter · Jahr“ in einer Zeile, ohne Beschriftung.
 function songSubline(s){
-  return [s.performer, s.year].filter(Boolean).join(' · ');
+  return [s.performer || s.writers, s.year].filter(Boolean).join(' · ');
 }
 
 function listSubline(s){
@@ -522,7 +524,7 @@ function SongMeta({song}){
     <div className="song-meta">
       <h2>{song.title}</h2>
       {songSubline(song) && <div className="artist">{songSubline(song)}</div>}
-      {song.writers && <div className="writers">Songwriter: {song.writers}</div>}
+      {song.writers && song.performer && <div className="writers">Songwriter: {song.writers}</div>}
     </div>
   );
 }

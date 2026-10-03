@@ -74,7 +74,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
 - `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
   Zoomstufen
-- `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr, Songwriter;
+- `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
+  ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
   „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
   herausnehmen, neue Liste mit dem Lied anlegen)
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
