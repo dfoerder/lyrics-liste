@@ -40,16 +40,23 @@ func contentBox(_ ctx: CGContext, width w: Int, height h: Int) -> CGRect? {
 
 for i in 0..<doc.pageCount {
     guard let page = doc.page(at: i) else { continue }
-    let box = page.bounds(for: .mediaBox)
-    let w = Int(box.width * scale), h = Int(box.height * scale)
+    // Sichtbarer Bereich (CropBox, z.B. Zuschnitt in Vorschau); bei gedrehten Seiten
+    // (/Rotate 90/270) sind Breite und Höhe vertauscht – draw(with:to:) dreht selbst.
+    let box = page.bounds(for: .cropBox)
+    let quer = page.rotation % 180 != 0
+    let breite = quer ? box.height : box.width, hoehe = quer ? box.width : box.height
+    // Kleine Seiten (z.B. eng zugeschnittene Scans) mindestens 1100 px breit rendern,
+    // damit der Zoom in der App scharf bleibt
+    let faktor = max(scale, 1100 / breite)
+    let w = Int(breite * faktor), h = Int(hoehe * faktor)
     // Graustufen: Noten sind schwarz-weiß, das hält die Bilder klein
     guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                               space: CGColorSpaceCreateDeviceGray(),
                               bitmapInfo: CGImageAlphaInfo.none.rawValue) else { exit(2) }
     ctx.setFillColor(gray: 1, alpha: 1)
     ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-    ctx.scaleBy(x: scale, y: scale)
-    page.draw(with: .mediaBox, to: ctx)
+    ctx.scaleBy(x: faktor, y: faktor)
+    page.draw(with: .cropBox, to: ctx)
     guard let full = ctx.makeImage() else { exit(3) }
     let image = contentBox(ctx, width: w, height: h).flatMap { full.cropping(to: $0) } ?? full
     guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { exit(3) }

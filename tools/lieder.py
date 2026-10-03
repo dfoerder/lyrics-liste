@@ -793,11 +793,238 @@ def cmd_export(args, data):
     return False
 
 
+# ---------------------------------------------------------------- Ordner privat/data
+
+# Ein Lied im Ordner = gleicher Dateiname mit .txt (Kopf + Text), .pdf (Noten), .mid (Stimmen).
+# Varianten: Noten als Bild (name.png / name-noten.png), Stimmen einzeln (name-s/-a/-t/-b.mid).
+DEFAULT_DATA = ROOT / 'privat' / 'data'
+SCAN_EXT = {'.pdf', '.mid', '.txt', '.png', '.gif', '.jpg', '.jpeg'}
+IMAGE_EXT = {'.png', '.gif', '.jpg', '.jpeg'}
+IGNORE_DIRS = {'alt', 'mp3'}          # Ablage-Unterordner, keine Lieder
+VOICE_TAIL = re.compile(r'-(s|a|t|b)$', re.I)
+
+
+def state_path(args):
+    return args.datei.parent / 'data-import.json'
+
+
+def load_state(args):
+    p = state_path(args)
+    return json.loads(p.read_text(encoding='utf-8')) if p.exists() else {}
+
+
+def save_state(args, state):
+    state_path(args).write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + '\n', encoding='utf-8')
+
+
+def scan_groups(daten):
+    """Dateien unter privat/data nach Liedname gruppieren (Schlüssel: Unterordner/Name)."""
+    groups = {}
+    for f in sorted(daten.rglob('*')):
+        if not f.is_file() or f.name.startswith('.') or f.suffix.lower() not in SCAN_EXT:
+            continue
+        rel_dir = f.parent.relative_to(daten)
+        if any(part.lower() in IGNORE_DIRS for part in rel_dir.parts):
+            continue
+        stem, ext = f.stem, f.suffix.lower()
+        kind = ext
+        m = VOICE_TAIL.search(stem) if ext == '.mid' else None
+        if m:
+            stem, kind = stem[:m.start()], 'stimme'
+        elif ext in IMAGE_EXT:
+            stem, kind = (stem[:-6] if stem.endswith('-noten') else stem), 'bild'
+        key = stem if str(rel_dir) == '.' else str(rel_dir / stem)
+        g = groups.setdefault(key, {'txt': None, 'pdf': None, 'mid': None, 'bild': [], 'stimmen': []})
+        if kind in ('bild', 'stimme'):
+            g['bild' if kind == 'bild' else 'stimmen'].append(f)
+        else:
+            g[ext[1:]] = f
+    return groups
+
+
+def group_files(g):
+    return [f for f in (g['txt'], g['pdf'], g['mid']) if f] + g['bild'] + g['stimmen']
+
+
+def file_hashes(g):
+    import hashlib
+    return {f.name: hashlib.sha1(f.read_bytes()).hexdigest() for f in group_files(g)}
+
+
+def parse_song_txt(path):
+    """Kopf: „Titel, Person, Jahr“ in der ersten Zeile (oder Titel / Jahr / Person in bis zu 3 Zeilen),
+    danach eine Leerzeile und der Liedtext."""
+    lines = path.read_text(encoding='utf-8').replace('\r\n', '\n').split('\n')
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    head = []
+    while lines and lines[0].strip():
+        head.append(lines.pop(0).strip())
+    if not head:
+        raise Fehler(f'{path.name}: Datei ist leer.')
+    first = head[0]
+    for pattern, order in ((r'(.+),\s*([^,]+?),\s*(\d{4})', 'tpj'), (r'(.+),\s*(\d{4}),\s*([^,]+)', 'tjp'),
+                           (r'(.+),\s*(\d{4})', 'tj')):
+        m = re.fullmatch(pattern, first)
+        if m:
+            parts = dict(zip(order, m.groups()))
+            title, person, year = parts['t'], parts.get('p', ''), parts['j']
+            body = head[1:] + lines          # falls die Leerzeile nach dem Kopf fehlt
+            break
+    else:
+        # Titel in Zeile 1, darunter „Person, Jahr“ (oder Person und Jahr in eigenen Zeilen)
+        rest = [x.strip() for line in head[1:] for x in line.split(',') if x.strip()]
+        years = [x for x in rest if re.fullmatch(r'\d{4}', x)]
+        if 2 <= len(head) <= 3 and years:
+            year, title = years[0], head[0]
+            person = ', '.join(x for x in rest if x != year)
+            body = lines
+        else:
+            raise Fehler(f'{path.name}: Kopfzeile nicht erkannt. Erwartet z.B. „Titel, Person, 1768“ '
+                         'in der ersten Zeile, dann eine Leerzeile und den Text.')
+    lyrics = '\n'.join(body).strip('\n')
+    if not lyrics.strip():
+        raise Fehler(f'{path.name}: kein Liedtext unter der Kopfzeile.')
+    return title.strip().rstrip(','), person.strip(), year, lyrics
+
+
+def cmd_scan(args, data):
+    daten = args.daten
+    if not daten.exists():
+        raise Fehler(f'Ordner {daten} gibt es nicht.')
+    state, groups = load_state(args), scan_groups(daten)
+    neu, geaendert, unvollst, bekannt = [], [], [], 0
+    for key, g in sorted(groups.items()):
+        missing = [n for n, ok in (('.txt', g['txt']), ('.pdf', g['pdf'] or g['bild']), ('.mid', g['mid'] or g['stimmen']))
+                   if not ok]
+        if state.get(key, {}).get('ignoriert'):
+            continue
+        if key in state:
+            old, cur = state[key].get('hashes', {}), file_hashes(g)
+            changes = sorted(n for n in set(old) | set(cur) if old.get(n) != cur.get(n))
+            if changes:
+                geaendert.append(f'{key} → {state[key]["id"]}: ' + ', '.join(
+                    f'{n} ({"neu" if n not in old else "entfernt" if n not in cur else "geändert"})' for n in changes))
+            else:
+                bekannt += 1
+            continue
+        if not g['txt'] and not g['pdf']:
+            continue                          # z.B. lose MIDI-Datei – kein Lied
+        if not g['txt']:
+            unvollst.append(f'{key}: .txt fehlt')
+            continue
+        try:
+            title, person, year, lyrics = parse_song_txt(g['txt'])
+        except Fehler as err:
+            unvollst.append(f'{key}: {err}')
+            continue
+        sid = slugify(title)
+        hint = f' – ACHTUNG: id „{sid}“ gibt es schon ({song_line(find_song(data, sid))})' if find_song(data, sid) else ''
+        neu.append(f'{key} → „{title}“ · {person or "ohne Person"} · {year}'
+                   + (f' (fehlt: {", ".join(missing)})' if missing else '') + hint)
+    print(f'Ordner {daten}: {len(groups)} Dateigruppen, {bekannt} schon eingelesen und unverändert')
+    for label, items in (('NEU', neu), ('GEÄNDERT', geaendert), ('UNVOLLSTÄNDIG', unvollst)):
+        for item in items:
+            print(f'{label}: {item}')
+    if not (neu or geaendert or unvollst):
+        print('Nichts Neues.')
+    return False
+
+
+def cmd_aus_ordner(args, data):
+    groups = scan_groups(args.daten)
+    g = groups.get(args.gruppe)
+    if not g:
+        raise Fehler(f'Kein Lied „{args.gruppe}“ in {args.daten}. `scan` zeigt alle Namen.')
+    if not g['txt']:
+        raise Fehler(f'{args.gruppe}: .txt mit Titel und Text fehlt.')
+    title, person, year, raw = parse_song_txt(g['txt'])
+    state = load_state(args)
+    sid = args.id or (state.get(args.gruppe, {}).get('id')) or slugify(title)
+    existing = find_song(data, sid)
+    if existing and not args.ersetzen:
+        raise Fehler(f'Es gibt schon {song_line(existing)} (id {sid}). Mit --ersetzen aktualisieren.')
+    lyrics, rep = clean_lyrics(raw, '')      # Kopfzeile ist schon abgetrennt – erste Liedzeile bleibt
+    song = {'id': sid, 'title': title, 'writers': person, 'performer': '', 'year': year, 'lyrics': lyrics}
+
+    if g['pdf']:
+        song['scores'] = read_scores(g['pdf'])
+    elif g['bild']:
+        song['scores'] = [u for f in sorted(g['bild']) for u in read_scores(f)]
+    elif existing and existing.get('scores'):
+        song['scores'] = existing['scores']
+    if g['mid']:
+        try:
+            voices = split_voices(g['mid'])
+        except Fehler:
+            voices = [read_voice(g['mid'], 'Alle')]   # einstimmige Datei: als eine Stimme
+    elif g['stimmen']:
+        voices = [read_voice(f) for f in g['stimmen']]
+        order = {n: i for i, n in enumerate(VOICE_ORDER)}
+        voices.sort(key=lambda v: order.get(v['name'], len(order)))
+    else:
+        voices = existing.get('voices') if existing else None
+    if voices:
+        song['voices'] = voices
+
+    total, _ = describe(lyrics)
+    sizes = stanza_sizes(lyrics)
+    status = 'Probelauf – nichts gespeichert' if args.probelauf else ('aktualisiert' if existing else 'neu')
+    print(f'{song_line(song)} (id: {sid}) – {status}')
+    print(f'Kopf: Titel „{title}“, Person „{person or "-"}“, Jahr {year}')
+    print(f'Text: {total} Zeilen in {len(sizes)} {"Strophe" if len(sizes) == 1 else "Strophen"}: '
+          + ', '.join(map(str, sizes)) + ' Zeilen')
+    if max(sizes or [0]) > 12:
+        print('HINWEIS: Ein Block hat mehr als 12 Zeilen ohne Leerzeile – vermutlich fehlen Leerzeilen zwischen den Strophen.')
+    if rep['akkordzeilen'] or rep['fusszeilen'] or rep['sonstige']:
+        print(f'Entfernt: {rep["akkordzeilen"]} Akkordzeilen, {len(rep["fusszeilen"])} Fußzeilen, {rep["sonstige"]} sonstige')
+    print('Noten: ' + (scores_info(song) or 'keine'))
+    print('Stimmen: ' + (voices_info(song) or 'keine'))
+    others = [s for s in data['songs'] if s['id'] != sid and same_title(s['title'], title)]
+    for s in others:
+        print(f'ANDERE VERSION in der Sammlung: {song_line(s)} (id {s["id"]})')
+    if args.probelauf:
+        return False
+    if existing:
+        data['songs'][data['songs'].index(existing)] = song
+    else:
+        data['songs'].append(song)
+    for name in args.liste or []:
+        add_to_list(data, name, [sid])
+        print(f'In Liste "{name}" aufgenommen')
+    state[args.gruppe] = {'id': sid, 'hashes': file_hashes(g)}
+    save_state(args, state)
+    return True
+
+
+def cmd_verknuepfen(args, data):
+    """Vorhandenes Lied mit einer Dateigruppe verbinden (ohne neu einzulesen)."""
+    s = require_song(data, args.id)
+    g = scan_groups(args.daten).get(args.gruppe)
+    if not g:
+        raise Fehler(f'Kein Lied „{args.gruppe}“ in {args.daten}.')
+    state = load_state(args)
+    state[args.gruppe] = {'id': s['id'], 'hashes': file_hashes(g)}
+    save_state(args, state)
+    print(f'Verknüpft: {args.gruppe} → {song_line(s)}')
+    return False
+
+
+def cmd_ignorieren(args, data):
+    """Dateigruppe beim Scan übergehen (z.B. Sammeldateien, die kein einzelnes Lied sind)."""
+    state = load_state(args)
+    state[args.gruppe] = {'ignoriert': True}
+    save_state(args, state)
+    print(f'Wird beim Scan übergangen: {args.gruppe}')
+    return False
+
+
 # ---------------------------------------------------------------- CLI
 
 def main(argv=None):
     p = argparse.ArgumentParser(description='Lieder-Sammlung der Lyrics-Liste pflegen.')
     p.add_argument('--datei', type=Path, default=DEFAULT_FILE, help='Sammlungsdatei (Standard: privat/familien-lieder.json)')
+    p.add_argument('--daten', type=Path, default=DEFAULT_DATA, help='Ordner mit Lied-Dateien (Standard: privat/data)')
     sub = p.add_subparsers(dest='befehl', required=True)
 
     a = sub.add_parser('hinzufuegen', help='Lied aus der Zwischenablage aufnehmen')
@@ -847,6 +1074,19 @@ def main(argv=None):
                    help='eine mehrstimmige MIDI-Datei (eine Spur je Stimme, z.B. Taizé 4voix) in Stimmen aufteilen')
     m.add_argument('--entfernen', action='store_true', help='Stimmen des Liedes entfernen')
 
+    sub.add_parser('scan', help='privat/data nach neuen oder geänderten Liedern durchsuchen')
+    o = sub.add_parser('aus-ordner', help='Lied aus privat/data einlesen (.txt + .pdf + .mid)')
+    o.add_argument('gruppe', help='Name wie von `scan` angezeigt, z.B. "taize/Ubi caritas"')
+    o.add_argument('--liste', action='append', help='in diese Liste aufnehmen (mehrfach möglich)')
+    o.add_argument('--ersetzen', action='store_true', help='vorhandenes Lied aktualisieren')
+    o.add_argument('--id', help='eigene id (Standard: aus dem Titel)')
+    o.add_argument('--probelauf', action='store_true', help='nur zeigen, was passieren würde')
+    k = sub.add_parser('verknuepfen', help='vorhandenes Lied mit einer Dateigruppe verbinden')
+    k.add_argument('gruppe')
+    k.add_argument('id')
+    i = sub.add_parser('ignorieren', help='Dateigruppe beim Scan übergehen')
+    i.add_argument('gruppe')
+
     sub.add_parser('uebersicht', help='alle Lieder und Listen ohne Text')
     v = sub.add_parser('vorschau', help='formatierte Texte im Browser ansehen')
     v.add_argument('ids', nargs='*')
@@ -854,7 +1094,8 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
-                'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
+                'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'scan': cmd_scan,
+                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
     try:
         data = load(args.datei)
         if commands[args.befehl](args, data):

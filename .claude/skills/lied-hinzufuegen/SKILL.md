@@ -1,6 +1,6 @@
 ---
 name: lied-hinzufuegen
-description: Nimmt ein Lied in die private Lieder-Sammlung der Lyrics-Liste auf. Holt den Songtext aus der Zwischenablage, formatiert ihn (Akkorde, CCLI- und Copyright-Fußzeilen raus, Abschnitte wie Strophe/Refrain einheitlich), erfasst die Version (Interpret und Jahr) und speichert alles in privat/familien-lieder.json. Verwende diesen Skill immer, wenn der Nutzer ein Lied oder einen Songtext hinzufügen, aufnehmen, aktualisieren oder entfernen will, Liedangaben korrigieren möchte oder Lieder in Listen wie „Advent“ oder „Sonntagsandacht“ einsortieren will. Das gilt auch, wenn er nur „neues Lied: …“, „hab den Text kopiert“ oder „nimm Oceans von Hillsong auf“ schreibt.
+description: Nimmt neue Lieder in die private Lieder-Sammlung der Lyrics-Liste auf. Durchsucht den Ordner privat/data (mit Unterordnern) nach neuen oder geänderten Liedern – je Lied name.txt (Kopf „Titel, Person, Jahr“ + Text), name.pdf (Noten) und name.mid (Übungsstimmen) –, fragt pro neuem Lied nach den Listen und speichert alles in privat/familien-lieder.json. Kann auch Text aus der Zwischenablage formatieren, Liedangaben ändern, Lieder löschen und Listen pflegen. Verwende diesen Skill immer, wenn der Nutzer Lieder hinzufügen, aufnehmen, aktualisieren oder entfernen will, neue Dateien in privat/data abgelegt hat, Liedangaben korrigieren möchte oder Lieder in Listen wie „Morgenandacht“ oder „Abendandacht“ einsortieren will – auch bei „neue Lieder im Ordner“, „schau mal ob was Neues da ist“ oder einfach „/lied-hinzufuegen“ ohne weitere Angaben.
 ---
 
 # Lied hinzufügen
@@ -14,16 +14,18 @@ Alle Arbeit erledigt das Skript `tools/lieder.py` (vom Projektordner aus aufrufe
 
 ## Der Songtext wird nie abgetippt
 
-Den Text kopiert der Nutzer aus einer Quelle, für die die Familie die Rechte hat,
-zum Beispiel CCLI SongSelect, ein Liederbuch oder gekaufte Noten. Das Skript liest ihn
-direkt aus der Zwischenablage. Dafür gibt es zwei Gründe:
+Den Text bereitet der Nutzer selbst vor, aus einer Quelle, für die die Familie die
+Rechte hat, zum Beispiel ein gekauftes Gesangbuch, SongSelect oder gekaufte Noten. Das
+Skript liest ihn direkt aus seiner `.txt` in `privat/data` oder aus der Zwischenablage.
+Dafür gibt es zwei Gründe:
 
 - **Urheberrecht:** Songtexte sind geschützt. Du schreibst keine Liedtexte aus dem
   Gedächtnis, ergänzt keine fehlenden Zeilen und gibst den Text auch nicht im Chat
   wieder. Das Skript gibt deshalb absichtlich nur Zusammenfassungen aus, also Abschnitte
-  und Zeilenzahlen. Lies die Texte nicht mit `cat` oder Ähnlichem aus der JSON-Datei.
-- **Keine Abschreibfehler:** Was aus der Zwischenablage kommt, stimmt Buchstabe für
-  Buchstabe.
+  und Zeilenzahlen. Lies die Texte nicht mit `cat` oder Ähnlichem, weder aus der
+  JSON-Datei noch aus den `.txt`-Dateien.
+- **Keine Abschreibfehler:** Was aus der Datei oder der Zwischenablage kommt, stimmt
+  Buchstabe für Buchstabe.
 
 Möchte der Nutzer den formatierten Text sehen, öffne die Vorschau im Browser:
 `python3 tools/lieder.py vorschau <id>`.
@@ -31,7 +33,93 @@ Möchte der Nutzer den formatierten Text sehen, öffne die Vorschau im Browser:
 Fügt der Nutzer den Text stattdessen in den Chat ein, bitte ihn freundlich, den Text zu
 kopieren und nur „kopiert“ zu schreiben. Dann läuft alles über das Skript.
 
-## Ablauf
+## Hauptweg: Lieder aus dem Ordner `privat/data`
+
+Der Nutzer legt neue Lieder als Dateien in `privat/data` oder einen Unterordner, zum
+Beispiel `privat/data/taize/`. Zu jedem Lied gehören drei Dateien mit gleichem Namen:
+
+| Datei | Inhalt |
+|---|---|
+| `name.txt` | Kopf, dann eine Leerzeile und der Liedtext, Strophen durch Leerzeilen getrennt. Der Kopf ist entweder eine Zeile **Titel, Person, Jahr**, z.B. `Grosser Gott wir loben dich, Ignaz Franz, 1768`, oder zwei Zeilen: Titel, darunter **Person, Jahr**, z.B. `Matthias Claudius, 1779`. |
+| `name.pdf` | Noten. Das Skript rendert sie als Bild, mit abgeschnittenem weißem Rand. Ein Bild (`name.png`, `name-noten.png`) geht auch. |
+| `name.mid` | Übungsstimmen, eine Spur je Stimme. Das Skript teilt sie automatisch auf. Einzelne Dateien `name-s/-a/-t/-b.mid` gehen auch. |
+
+„Person“ ist der Autor (Text oder Musik). Sie wird als Songwriter gespeichert, ohne
+Interpret. Die App zeigt dann „Ignaz Franz · 1768“. Mehrere Personen mit „/“ oder „und“
+trennen, nicht mit Komma, denn das Komma trennt Titel, Person und Jahr. Ein Komma im
+Titel ist erlaubt.
+
+Die Unterordner `alt` und `mp3` werden übergangen. Welche Dateien schon eingelesen sind,
+merkt sich `privat/data-import.json`, mit Prüfsumme je Datei.
+
+### MIDI fehlt? Aus den Noten ablesen
+
+Bittet der Nutzer darum, die `.mid` aus den Noten zu erzeugen, und steht kein
+Notenerkennungs-Programm bereit, liest du die Stimmen selbst ab. Bei „Der Mond ist
+aufgegangen“ hat das zuverlässig geklappt:
+
+1. **Bild holen:** Hat die PDF einen eingebetteten Scan, nimm diesen, denn er ist höher
+   aufgelöst. Achte auf die Drehung der Seite und richte ihn mit `sips -r 270` o.ä.
+   aufrecht aus. Sonst `swift tools/pdf_seiten.swift <pdf> <ordner> 5`.
+2. **Raster:** `swift tools/noten_raster.swift <bild> <ordner>` richtet den Scan gerade
+   aus und zeichnet ein beschriftetes Tonhöhen-Raster ein: rot für Linien, blau für
+   Zwischenräume, „B“ steht für das Vorzeichen der Tonart. Es schreibt je Notenzeile drei
+   Ausschnitte `zeile<N>_<teil>.png`. Lies sie mit dem Read-Tool Takt für Takt ab.
+3. **Prüfen:** Steht ein Notenkopf zwischen zwei Rasterlinien, halte dich an die echten
+   Notenlinien im Scan. Plausibilität: Wiederholte Melodieteile sollten gleich gelesen
+   sein, und jeder Akkord sollte in der Tonart Sinn ergeben. Vorzeichen im Takt
+   (♮, ♯, ♭) gesondert beachten.
+4. **Notation schreiben:** `privat/data/<name>.stimmen`. Das Format steht oben in
+   `tools/midi_schreiben.py`, zum Beispiel `Sopran: F4 | G4 F4 Bb4 A4 | G4:2 F4 A4 | …`.
+   Vorzeichen immer ausschreiben (Bb, F#). Dann
+   `python3 tools/midi_schreiben.py privat/data/<name>.stimmen`. Das Skript prüft, dass
+   alle Stimmen pro Takt gleich lang sind, und schreibt `<name>.mid` daneben.
+5. **Sagen,** dass die Stimmen abgelesen sind und durch Anhören geprüft werden sollten.
+   Falsche Töne korrigiert man in der `.stimmen`-Datei und erzeugt die MIDI neu. Der Scan
+   meldet das Lied dann als GEÄNDERT.
+
+### Ablauf
+
+1. **Scannen:** `python3 tools/lieder.py scan`. Die Ausgabe hat drei Arten von Zeilen:
+   - `NEU: <gruppe> → „Titel“ · Person · Jahr`: Hier fehlt eventuell eine Datei
+     („fehlt: .pdf, .mid“), oder es gibt die id schon („ACHTUNG“).
+   - `GEÄNDERT: <gruppe> → <id>: …`: Dateien haben sich seit dem Einlesen geändert.
+   - `UNVOLLSTÄNDIG: <gruppe>: …`: .txt fehlt, oder die Kopfzeile wurde nicht erkannt.
+   Meldet der Scan „Nichts Neues“, sag das dem Nutzer und frag, ob er stattdessen einen
+   Text aus der Zwischenablage aufnehmen möchte (siehe unten).
+2. **Unvollständiges melden:** Fehlt PDF oder MIDI, frag, ob das Lied trotzdem schon
+   aufgenommen werden soll. Fehlende Dateien können später ergänzt werden. Der Scan
+   meldet das Lied dann als GEÄNDERT. Bei kaputter Kopfzeile beschreib dem Nutzer, was
+   in Zeile 1 erwartet wird. Ist eine Datei gar kein Lied, zum Beispiel eine Sammeldatei:
+   `python3 tools/lieder.py ignorieren "<gruppe>"`.
+3. **Für jedes neue Lied nach den Listen fragen.** Das ist Pflicht, der Nutzer entscheidet
+   das pro Lied. Die vorhandenen Listen zeigt `python3 tools/lieder.py uebersicht`.
+   Frag mit AskUserQuestion: eine Frage je Lied (bis zu 4 Lieder pro Aufruf),
+   `multiSelect: true`, die Listen als Optionen. Gibt es mehr als 4 Listen, frag
+   stattdessen im Text. Eine neue Liste nennt der Nutzer über „Other“.
+4. **Probelauf, dann speichern**, je Lied:
+   ```bash
+   python3 tools/lieder.py aus-ordner "<gruppe>" --liste "Morgenandacht" --liste "Abendandacht" --probelauf
+   python3 tools/lieder.py aus-ordner "<gruppe>" --liste "Morgenandacht" --liste "Abendandacht"
+   ```
+   Der Kopf wird vom Text getrennt. Die erste Liedzeile bleibt also immer erhalten, auch
+   wenn sie gleich dem Titel ist. Achte im Probelauf auf „HINWEIS: … mehr als 12 Zeilen“
+   (Leerzeilen fehlen) und „ANDERE VERSION“.
+5. **Geänderte Lieder:** Frag, ob sie neu eingelesen werden sollen. Dann
+   `aus-ordner "<gruppe>" --ersetzen`. Die id und die Listen bleiben gleich, Text, Noten
+   und Stimmen kommen neu aus den Dateien.
+6. **Kurz berichten**, als Tabelle: Titel, Person · Jahr, Strophen, Noten, Stimmen,
+   Listen. Biete die Vorschau an (`vorschau <id> …`) und erwähne am Ende
+   `/lieder-verschicken`.
+
+Ein Lied, das schon in der Sammlung ist, aber aus einer anderen Quelle stammt, verbindest
+du mit seinen Dateien über `python3 tools/lieder.py verknuepfen "<gruppe>" <id>`. Danach
+gilt es als eingelesen.
+
+## Alternative: Text aus der Zwischenablage
+
+Nur, wenn der Nutzer ausdrücklich einen kopierten Text aufnehmen will, ohne Dateien in
+`privat/data`.
 
 1. **Klären, welche Version gemeint ist.** Du brauchst Titel, Interpret und Jahr.
    Verschiedene Interpreten singen ein Lied oft leicht anders, und der Nutzer passt den
@@ -173,6 +261,10 @@ Bildinhalt.
 | Lied löschen | `entfernen <id>`. Das Lied verschwindet auch aus allen Listen. Vorher kurz bestätigen lassen. |
 | Listen pflegen | `liste "Advent" --hinzufuegen <id> <id>`, `--entfernen <id>`, `--loeschen` |
 | Überblick (ohne Texte) | `uebersicht`. Zeigt auch die ids. |
+| Ordner nach Neuem durchsuchen | `scan` |
+| Lied aus dem Ordner einlesen | `aus-ordner "<gruppe>" [--liste …] [--ersetzen] [--probelauf]` |
+| Vorhandenes Lied mit Dateien verbinden | `verknuepfen "<gruppe>" <id>` |
+| Datei beim Scan übergehen | `ignorieren "<gruppe>"` |
 | Formatierten Text ansehen | `vorschau [<id> …]`. Öffnet eine HTML-Seite im Browser, mit Noten. |
 | Noten an vorhandenes Lied hängen | `noten <id> BILD [BILD …]`. Ersetzt vorhandene Noten, der Text bleibt. `noten <id> --entfernen` nimmt sie wieder weg. |
 

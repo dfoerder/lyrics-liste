@@ -46,6 +46,16 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   dabei wird nur leerer weißer Rand abgeschnitten), Übungsstimmen als MIDI anhängen
   (`stimmen`; Stimme aus dem Dateiende `-s/-a/-t/-b`), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
   bewusst nie Songtexte oder Bildinhalte aus.
+- **Ordner `privat/data`** (mit Unterordnern): je Lied `name.txt` (1. Zeile „Titel,
+  Person, Jahr“, Leerzeile, Text), `name.pdf` (Noten), `name.mid` (Stimmen, eine Spur je
+  Stimme). `lieder.py scan` findet neue/geänderte Lieder, `aus-ordner "<gruppe>"` liest
+  eins ein. Was schon eingelesen ist, steht in `privat/data-import.json` (Gruppe → id +
+  Prüfsummen); `verknuepfen`/`ignorieren` pflegen das. Unterordner `alt`/`mp3` werden
+  übergangen.
+- Fehlt die `.mid`: Noten ablesen mit `tools/noten_raster.swift` (Lesehilfe mit
+  Tonhöhen-Raster), Notation in `privat/data/<name>.stimmen`, daraus MIDI mit
+  `tools/midi_schreiben.py`. `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
+  rendert kleine Seiten mit mindestens 1100 px Breite.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
 - `lieder-prompt.md` — Alternative für ein Claude-Projekt in der Claude-App.
