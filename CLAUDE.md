@@ -127,3 +127,9 @@ Dann `http://localhost:8322` aufrufen.
 
 Nie `alert()`, `confirm()`, `prompt()` verwenden — immer Custom-Dialoge mit
 Ja/Nein-Buttons (siehe `Confirm` und `PromptDialog` in `index.html`).
+
+## Beim Zusammenfassen (compact)
+
+Die zuletzt bearbeitete Aufgabe ausführlich behalten: genaue Befehle, Dateipfade,
+Fehlermeldungen, offene Rückfragen und den letzten Stand von Dateien, die gerade
+geändert werden.
