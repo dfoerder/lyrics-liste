@@ -25,7 +25,8 @@ Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 
 **App-Version:** `APP_VERSION` in `index.html` (Datum `JJJJ-MM-TT`) steht unten auf der
 Startseite. Bei jeder Änderung an der App auf das aktuelle Datum setzen, damit man auf den
-Geräten sieht, ob die neue Version geladen ist.
+Geräten sieht, ob die neue Version geladen ist. Mehrere Änderungen am selben Tag: `-2`,
+`-3`, … anhängen (Anzeige „5.10.2026 (2)“).
 
 **Offline / PWA:**
 - `sw.js` — Service Worker. Cacht App-Shell und die CDN-Bibliotheken beim Install.
@@ -80,6 +81,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   (ids beginnen mit `meine-`, eigene Reihenfolge). Werden weder vom Import noch vom
   Mülleimer gelöscht; ids fehlender Lieder bleiben stehen und erscheinen wieder,
   sobald das Lied zurückkommt.
+- `localStorage` `lyrics-favoriten` — Favoriten: Lied-ids in eigener Reihenfolge. Auf der
+  Startseite ganz oben, im Lied Knopf „☆ Zu Favoriten“ / „★ Favorit“. In `ListView` wie eine
+  eigene Liste (`FAV_ID`, `own` + `fixed`: verschieben/entfernen ja, umbenennen/löschen nein).
+  Bleibt bei Import und Mülleimer erhalten.
 - `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
@@ -88,7 +93,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **React-Komponenten (in index.html):**
 - `App` — verwaltet `phase` (`home`, `list`, `song`, `print`), `collection`, Import
-- `HomeView` — „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
+- `HomeView` — „Favoriten", „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
   Import-Button, alles entfernen, Stand-Datum
 - `ListView` — Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
   eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
