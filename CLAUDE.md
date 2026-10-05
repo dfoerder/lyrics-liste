@@ -32,11 +32,13 @@ Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
 `{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
-performer, year, lyrics, scores?, voices?}]}` — `lists` optional. `scores` = optionale Liste von
+performer, year, lyrics, scores?, voices?, link?}]}` — `lists` optional. `scores` = optionale Liste von
 Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
 `voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
 (`data:audio/midi;base64,…`), Reihenfolge Sopran, Alt, Tenor, Bass. Ältere App-Stände
-ignorieren das Feld, deshalb bleibt `version: 2`. Format-Spezifikation für Claude
+ignorieren das Feld, deshalb bleibt `version: 2`. `link` = optionaler https-Link zum
+Anhören (Spotify, YouTube, …), in der Liedansicht als Knopf „▶ Song spielen“; gesetzt mit
+`lieder.py bearbeiten <id> --link URL` (oder `hinzufuegen --link`), `--link ""` entfernt ihn. Format-Spezifikation für Claude
 steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **Lieder-Sammlung pflegen (auf dem Mac):**
@@ -99,7 +101,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Zoomstufen
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
   ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
-  „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
+  „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
   herausnehmen, neue Liste mit dem Lied anlegen)
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste

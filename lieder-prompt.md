@@ -71,6 +71,8 @@ FELDER:
   tools/lieder.py eingebettet – bestehende scores unverändert übernehmen.
 - voices: optional, Übungsstimmen [{name, midi}] mit MIDI als data-URI. Werden nur
   über das Skript tools/lieder.py eingebettet – bestehende voices unverändert übernehmen.
+- link: optional, https-Link zum Anhören der Version (Spotify, YouTube, …). Nur vom Nutzer
+  übernehmen, nicht selbst suchen oder raten. Die App zeigt dafür „▶ Song spielen“.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds
   muss in songs existieren.
 

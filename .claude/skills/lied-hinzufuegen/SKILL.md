@@ -241,6 +241,18 @@ Wer keine Noten liest, kann so die Schriftgröße einstellen.
 4. **Vorhandenes Lied ergänzen:** `python3 tools/lieder.py noten <id> ~/Downloads/xyz.gif`.
    Der Text bleibt dabei unverändert.
 
+## Link zum Anhören
+
+Ein Lied kann einen Link haben, zum Beispiel zu Spotify oder YouTube. Die App zeigt dann
+den Knopf „▶ Song spielen“. Den Link gibt der Nutzer an. Such ihn nicht selbst und rate
+keinen. Tracking-Anhänge wie `?si=…` bei Spotify kannst du weglassen.
+
+```bash
+python3 tools/lieder.py bearbeiten <id> --link "https://open.spotify.com/…"
+```
+
+`--link ""` entfernt den Link. Beim Ersetzen des Textes bleibt er erhalten.
+
 ## Übungsstimmen (MIDI)
 
 Ein Lied kann pro Stimme eine MIDI-Datei haben. Die App zeigt dann einen Übungsplayer:

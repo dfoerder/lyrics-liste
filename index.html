@@ -59,6 +59,7 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .btn-primary:hover{background:var(--accent-dark)}
 .btn-secondary{background:var(--bg);border:1px solid var(--border2);color:var(--text2)}
 .btn-secondary:hover{background:var(--accent-bg)}
+a.btn{display:inline-block;text-decoration:none}
 .btn-danger{background:var(--danger-bg);color:var(--danger)}
 .btn-danger:hover{background:rgba(179,64,42,0.16)}
 
@@ -300,6 +301,7 @@ function parseCollection(text){
       .filter(v=>v && str(v.name) && typeof v.midi==='string' && /^data:audio\/(midi|mid|x-midi);base64,/.test(v.midi))
       .map(v=>({name: str(v.name), midi: v.midi}));
     if(voices.length) songs[id].voices = voices;
+    if(/^https:\/\/\S+$/.test(str(s.link))) songs[id].link = str(s.link);
   });
   if(Object.keys(songs).length===0) throw new Error('Die Datei enthält keine Lieder.');
   const lists = (Array.isArray(data.lists) ? data.lists : [])
@@ -910,6 +912,7 @@ function SongView({song, myLists, onBack, fontIndex, onFontChange, onToggleList,
         <SongMeta song={song} />
         <div className="song-lists no-print">
           <button className="btn btn-secondary" onClick={()=>setShowChooser(true)}>+ Zu Liste hinzufügen</button>
+          {song.link && <a className="btn btn-secondary" href={song.link} target="_blank" rel="noopener noreferrer">&#9654; Song spielen</a>}
           {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
         </div>
         {song.voices && song.voices.length>0 && <VoicePlayer key={song.id} voices={song.voices} />}

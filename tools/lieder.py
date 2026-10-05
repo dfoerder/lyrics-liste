@@ -399,6 +399,9 @@ def cmd_hinzufuegen(args, data):
         song['scores'] = scores
     if keep.get('voices'):
         song['voices'] = keep['voices']
+    link = pick(args.link, 'link')
+    if link:
+        song['link'] = check_link(link)
 
     total, sections = describe(lyrics)
     status = 'Probelauf – nichts gespeichert' if args.probelauf else ('aktualisiert' if existing else 'neu')
@@ -429,6 +432,8 @@ def cmd_hinzufuegen(args, data):
         print(f'Noten: {scores_info(song)}' + (' (neu)' if args.noten else ' (beibehalten)'))
     if song.get('voices'):
         print(f'Stimmen: {voices_info(song)} (beibehalten)')
+    if song.get('link'):
+        print(f'Link: {song["link"]}' + ('' if args.link else ' (beibehalten)'))
     for l in rep['fusszeilen']:
         print(f'  Fußzeile: {l[:100]}')
     h = rep['hinweise']
@@ -469,6 +474,13 @@ def cmd_hinzufuegen(args, data):
     return True
 
 
+def check_link(url):
+    url = url.strip()
+    if not re.fullmatch(r'https://\S+', url):
+        raise Fehler(f'Link muss mit https:// beginnen und darf keine Leerzeichen enthalten: {url}')
+    return url
+
+
 def add_to_list(data, name, ids):
     l = find_list(data, name)
     if not l:
@@ -487,7 +499,13 @@ def cmd_bearbeiten(args, data):
                          ('performer', args.interpret), ('year', args.jahr)):
         if value is not None:
             s[field] = value.strip()
-    print(f'Geändert: {song_line(s)}' + (f' | Songwriter: {s["writers"]}' if s['writers'] else ''))
+    if args.link is not None:
+        if args.link.strip():
+            s['link'] = check_link(args.link)
+        else:
+            s.pop('link', None)                  # --link "" entfernt den Link
+    print(f'Geändert: {song_line(s)}' + (f' | Songwriter: {s["writers"]}' if s['writers'] else '')
+          + (f' | Link: {s["link"]}' if s.get('link') else ''))
     return True
 
 
@@ -677,6 +695,7 @@ def cmd_uebersicht(args, data):
               f'{total} Zeilen in {stanzas} {"Strophe" if stanzas == 1 else "Strophen"}'
               + (f' | Noten: {scores_info(s)}' if s.get('scores') else '')
               + (f' | Stimmen: {voices_info(s)}' if s.get('voices') else '')
+              + (' | Link' if s.get('link') else '')
               + (f' | Listen: {", ".join(lists)}' if lists else ''))
     for l in data['lists']:
         print(f'Liste "{l["name"]}": {lieder(len(l["songIds"]))}')
@@ -702,7 +721,8 @@ def cmd_vorschau(args, data):
         parts.append(f'<section><h2>{html.escape(s["title"])}</h2>'
                      f'<div class="meta">{html.escape(meta)}</div>'
                      f'<div class="meta small">{"Songwriter: " + html.escape(s["writers"]) if s.get("writers") and s.get("performer") else ""}</div>'
-                     f'{images}<div class="lyrics">{"".join(body)}</div></section>')
+                     + (f'<p><a href="{html.escape(s["link"])}" target="_blank">▶ Song spielen</a></p>' if s.get('link') else '')
+                     + f'{images}<div class="lyrics">{"".join(body)}</div></section>')
     page = ('<!DOCTYPE html><html lang="de"><meta charset="utf-8"><title>Vorschau</title><style>'
             'body{font-family:-apple-system,sans-serif;background:#f4f6f7;color:#20313a;max-width:640px;margin:0 auto;padding:1rem}'
             'section{background:#fff;border:1px solid #dfe4e6;border-radius:.7rem;padding:1rem 1.2rem;margin-bottom:1rem}'
@@ -727,6 +747,8 @@ def validate(data):
         if s.get('id') in ids:
             problems.append(f'Doppelte id: {s["id"]}')
         ids.add(s.get('id'))
+        if s.get('link') and not re.fullmatch(r'https://\S+', s['link']):
+            problems.append(f'{song_line(s)}: Link muss mit https:// beginnen')
         if not s.get('lyrics') and not s.get('scores'):
             problems.append(f'{song_line(s)} hat weder Text noch Noten')
     for l in data['lists']:
@@ -966,6 +988,8 @@ def cmd_aus_ordner(args, data):
         voices = existing.get('voices') if existing else None
     if voices:
         song['voices'] = voices
+    if existing and existing.get('link'):
+        song['link'] = existing['link']
 
     total, _ = describe(lyrics)
     sizes = stanza_sizes(lyrics)
@@ -1043,6 +1067,7 @@ def main(argv=None):
     a.add_argument('--ohne-version', action='store_true',
                    help='Interpret/Jahr dürfen fehlen (Text ohne bestimmte Aufnahme, z.B. Liederbuch)')
     a.add_argument('--text-datei', help='Text aus Datei statt Zwischenablage')
+    a.add_argument('--link', help='Link zum Anhören (Spotify, YouTube, …), Knopf „Song spielen“ in der App')
 
     b = sub.add_parser('bearbeiten', help='Angaben eines Liedes ändern')
     b.add_argument('id')
@@ -1050,6 +1075,7 @@ def main(argv=None):
     b.add_argument('--songwriter')
     b.add_argument('--interpret')
     b.add_argument('--jahr')
+    b.add_argument('--link', help='Link zum Anhören setzen; --link "" entfernt ihn')
 
     e = sub.add_parser('entfernen', help='Lied löschen')
     e.add_argument('id')
