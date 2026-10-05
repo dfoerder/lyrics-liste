@@ -23,6 +23,10 @@ bei einem Import erhalten. Deshalb Lied-ids in der Sammlung nie ändern.
 **Eine einzige Datei:** `index.html` enthält die gesamte App (React via
 Babel-Standalone über CDN, kein Build-Schritt, kein npm).
 
+**App-Version:** `APP_VERSION` in `index.html` (Datum `JJJJ-MM-TT`) steht unten auf der
+Startseite. Bei jeder Änderung an der App auf das aktuelle Datum setzen, damit man auf den
+Geräten sieht, ob die neue Version geladen ist.
+
 **Offline / PWA:**
 - `sw.js` — Service Worker. Cacht App-Shell und die CDN-Bibliotheken beim Install.
   Eigene Dateien: Netz zuerst, offline aus dem Cache. CDN: Cache zuerst.

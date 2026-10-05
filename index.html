@@ -174,6 +174,9 @@ const DB_KEY_COLLECTION = 'sammlung';
 const LS_MY_LISTS = 'lyrics-eigene-listen';
 // Schriftgröße der Liedtexte, pro Gerät gemerkt (Index in FONT_SCALES)
 const LS_FONT_SIZE = 'lyrics-schriftgroesse';
+// Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt)
+const APP_VERSION = '2026-10-05';
+
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
 const LS_LEGACY = ['lyrics-lists','lyrics-songs'];
@@ -428,6 +431,7 @@ function HomeView({collection, myLists, onOpenList, onImportFile, onClear, onCre
             Noch keine Lieder auf diesem Gerät.<br/>Importiere die Lieder-Datei, die du bekommen hast.
             <div><button className="btn btn-primary" onClick={openFile}>Datei importieren</button></div>
           </div>}
+        {songCount===0 && <div className="stand">App-Version: {formatDate(APP_VERSION)}</div>}
         {songCount>0 &&
           <React.Fragment>
             <div className="card card-all">
@@ -447,7 +451,7 @@ function HomeView({collection, myLists, onOpenList, onImportFile, onClear, onCre
                 onOpen={()=>onOpenList(l.id)} />
             ))}
             <button className="btn-new-list" onClick={()=>setShowNewList(true)}>+ Neue Liste</button>
-            <div className="stand">Stand: {formatDate(collection.created || collection.importedAt)}</div>
+            <div className="stand">Stand Lieder: {formatDate(collection.created || collection.importedAt)} · App-Version: {formatDate(APP_VERSION)}</div>
           </React.Fragment>}
       </div>
       {showClear && <Confirm title="Alle Lieder entfernen?"
