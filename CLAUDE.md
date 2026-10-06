@@ -54,7 +54,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   (`stimmen`; Stimme aus dem Dateiende `-s/-a/-t/-b`), Angaben/Listen ändern, Vorschau, Export nach `privat/versand/`. Gibt
   bewusst nie Songtexte oder Bildinhalte aus.
 - **Ordner `privat/data`** (mit Unterordnern): je Lied `name.txt` (1. Zeile „Titel,
-  Person, Jahr“, Leerzeile, Text), `name.pdf` (Noten), `name.mid` (Stimmen, eine Spur je
+  Person, Jahr“, Leerzeile, Text; eine Zeile nur mit Link wird zu `link`), `name.pdf` (Noten), `name.mid` (Stimmen, eine Spur je
   Stimme). `lieder.py scan` findet neue/geänderte Lieder, `aus-ordner "<gruppe>"` liest
   eins ein. Was schon eingelesen ist, steht in `privat/data-import.json` (Gruppe → id +
   Prüfsummen); `verknuepfen`/`ignorieren` pflegen das. Unterordner `alt`/`mp3` werden

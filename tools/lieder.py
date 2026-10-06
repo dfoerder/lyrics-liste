@@ -856,6 +856,7 @@ def scan_groups(daten):
         elif ext in IMAGE_EXT:
             stem, kind = (stem[:-6] if stem.endswith('-noten') else stem), 'bild'
         key = stem if str(rel_dir) == '.' else str(rel_dir / stem)
+        key = unicodedata.normalize('NFC', key)   # macOS liefert Umlaute zerlegt (NFD)
         g = groups.setdefault(key, {'txt': None, 'pdf': None, 'mid': None, 'bild': [], 'stimmen': []})
         if kind in ('bild', 'stimme'):
             g['bild' if kind == 'bild' else 'stimmen'].append(f)
@@ -966,6 +967,9 @@ def cmd_aus_ordner(args, data):
     existing = find_song(data, sid)
     if existing and not args.ersetzen:
         raise Fehler(f'Es gibt schon {song_line(existing)} (id {sid}). Mit --ersetzen aktualisieren.')
+    # Eine Zeile, die nur aus einem Link besteht (z.B. Spotify), wird zum Link des Liedes
+    urls = re.findall(r'^[ \t]*(https://\S+)[ \t]*$', raw, re.M)
+    raw = re.sub(r'^[ \t]*https?://\S+[ \t]*$', '', raw, flags=re.M)
     lyrics, rep = clean_lyrics(raw, '')      # Kopfzeile ist schon abgetrennt – erste Liedzeile bleibt
     song = {'id': sid, 'title': title, 'writers': person, 'performer': '', 'year': year, 'lyrics': lyrics}
 
@@ -988,7 +992,9 @@ def cmd_aus_ordner(args, data):
         voices = existing.get('voices') if existing else None
     if voices:
         song['voices'] = voices
-    if existing and existing.get('link'):
+    if urls:
+        song['link'] = re.sub(r'\?si=\S*$', '', urls[0])   # Spotify-Tracking-Anhang weglassen
+    elif existing and existing.get('link'):
         song['link'] = existing['link']
 
     total, _ = describe(lyrics)
@@ -1004,6 +1010,8 @@ def cmd_aus_ordner(args, data):
         print(f'Entfernt: {rep["akkordzeilen"]} Akkordzeilen, {len(rep["fusszeilen"])} Fußzeilen, {rep["sonstige"]} sonstige')
     print('Noten: ' + (scores_info(song) or 'keine'))
     print('Stimmen: ' + (voices_info(song) or 'keine'))
+    if song.get('link'):
+        print(f'Link: {song["link"]}' + ('' if urls else ' (beibehalten)'))
     others = [s for s in data['songs'] if s['id'] != sid and same_title(s['title'], title)]
     for s in others:
         print(f'ANDERE VERSION in der Sammlung: {song_line(s)} (id {s["id"]})')
@@ -1119,6 +1127,8 @@ def main(argv=None):
     sub.add_parser('export', help='Datei für den Versand erzeugen')
 
     args = p.parse_args(argv)
+    if getattr(args, 'gruppe', None):
+        args.gruppe = unicodedata.normalize('NFC', args.gruppe)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
                 'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'scan': cmd_scan,
                 'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}

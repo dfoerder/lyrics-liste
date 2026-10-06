@@ -47,7 +47,8 @@ Beispiel `privat/data/taize/`. Zu jedem Lied gehören drei Dateien mit gleichem 
 „Person“ ist der Autor (Text oder Musik). Sie wird als Songwriter gespeichert, ohne
 Interpret. Die App zeigt dann „Ignaz Franz · 1768“. Mehrere Personen mit „/“ oder „und“
 trennen, nicht mit Komma, denn das Komma trennt Titel, Person und Jahr. Ein Komma im
-Titel ist erlaubt.
+Titel ist erlaubt. Eine Zeile, die nur aus einem Link besteht (z.B. Spotify), wird zum Link
+„▶ Song spielen“ und nicht zum Text.
 
 Die Unterordner `alt` und `mp3` werden übergangen. Welche Dateien schon eingelesen sind,
 merkt sich `privat/data-import.json`, mit Prüfsumme je Datei.
