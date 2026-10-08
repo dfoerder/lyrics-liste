@@ -79,6 +79,10 @@ a.btn{display:inline-block;text-decoration:none}
 .reorder-btn:disabled:hover{background:none}
 .btn-new-list{width:100%;border:1px dashed var(--border2);background:none;color:var(--accent-dark);border-radius:.7rem;padding:.8rem 1rem;font-weight:600;font-size:.92rem}
 .btn-new-list:hover{background:var(--accent-bg)}
+.search{position:relative;margin-bottom:.8rem}
+.search input{width:100%;padding:.6rem 2.2rem .6rem .8rem;border:1px solid var(--border2);border-radius:.6rem;background:var(--bg-card);font-family:inherit;font-size:1rem;color:var(--text)}
+.search-clear{position:absolute;right:.3rem;top:50%;transform:translateY(-50%);width:1.8rem;height:1.8rem;color:var(--muted);border-radius:.4rem}
+.song-item .snippet{display:block;font-size:.8rem;color:var(--text2);margin-top:.15rem;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
 .field{margin-bottom:1rem}
@@ -165,7 +169,7 @@ a.btn{display:inline-block;text-decoration:none}
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const {useState,useEffect,useRef} = React;
+const {useState,useEffect,useRef,useMemo} = React;
 
 // Die Sammlung (mit Notenbildern) liegt in IndexedDB – localStorage hat auf iOS nur ~5 MB.
 // Ältere Versionen speicherten sie unter LS_COLLECTION; sie wird beim ersten Laden übernommen.
@@ -181,7 +185,7 @@ const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 const LS_FAVORITES = 'lyrics-favoriten';
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-05-2';
+const APP_VERSION = '2026-10-08';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -258,6 +262,88 @@ function cleanLyrics(text){
 
 function sortSongs(arr){
   return arr.slice().sort((a,b)=>a.title.localeCompare(b.title,'de'));
+}
+
+// ---------- Volltextsuche (nur auf dem Gerät, fehlertolerant)
+// Groß/klein, Satzzeichen und Umlaute egal (ö = o = oe), Wortanfänge genügen,
+// ab 4 Buchstaben 1 Tippfehler erlaubt, ab 7 Buchstaben 2. Alle Suchwörter müssen vorkommen.
+function normalizeSearch(s){
+  return (s||'').toLowerCase().replace(/ß/g,'ss').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/ae/g,'a').replace(/oe/g,'o').replace(/ue/g,'u')
+    .replace(/[^a-z0-9]+/g,' ').trim();
+}
+function searchWords(s){ const n = normalizeSearch(s); return n ? n.split(' ') : []; }
+
+function editDistance(a, b, max){
+  if(Math.abs(a.length-b.length)>max) return max+1;
+  let prev = Array.from({length:b.length+1},(_,j)=>j);
+  for(let i=1;i<=a.length;i++){
+    const cur=[i]; let rowMin=i;
+    for(let j=1;j<=b.length;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      rowMin=Math.min(rowMin,cur[j]);
+    }
+    if(rowMin>max) return max+1;
+    prev=cur;
+  }
+  return prev[b.length];
+}
+
+// 3 = Wort beginnt mit dem Suchwort, 1 = mit Tippfehlern ähnlich, 0 = kein Treffer
+function wordMatch(token, word){
+  if(word.startsWith(token)) return 3;
+  const max = token.length>=7 ? 2 : token.length>=4 ? 1 : 0;
+  if(!max) return 0;
+  const d = Math.min(editDistance(token, word, max), editDistance(token, word.slice(0, token.length), max));
+  return d<=max ? 1 : 0;
+}
+function tokenMatch(token, words){
+  let best = 0;
+  for(const w of words){ const m = wordMatch(token, w); if(m>best){ best=m; if(best===3) break; } }
+  return best;
+}
+
+function buildSearchIndex(songs){
+  return Object.values(songs).map(s=>{
+    const lines = (s.lyrics||'').split('\n').filter(l=>l.trim()).map(l=>({text:l, words:new Set(searchWords(l))}));
+    return {
+      song: s,
+      title: new Set(searchWords(s.title)),
+      people: new Set(searchWords([s.performer, s.writers].join(' '))),
+      lyrics: new Set(lines.flatMap(l=>[...l.words])),
+      lines
+    };
+  });
+}
+
+function searchSongs(index, query){
+  const tokens = searchWords(query);
+  if(!tokens.length) return [];
+  const results = [];
+  for(const e of index){
+    let score = 0, titleHits = 0, lyricTokens = [];
+    for(const tok of tokens){
+      const t = tokenMatch(tok, e.title), p = tokenMatch(tok, e.people), l = tokenMatch(tok, e.lyrics);
+      const best = Math.max(t*3, p*2, l);
+      if(!best){ score = 0; break; }
+      score += best;
+      if(t) titleHits++;
+      if(l) lyricTokens.push(tok);
+    }
+    if(!score) continue;
+    let snippet = '';
+    if(titleHits<tokens.length && lyricTokens.length){
+      // Zeile mit den meisten Treffern als Fundstelle zeigen
+      let bestLine = null, bestCount = 0;
+      for(const line of e.lines){
+        const c = lyricTokens.reduce((n,tok)=>n+(tokenMatch(tok, line.words)?1:0), 0);
+        if(c>bestCount){ bestCount=c; bestLine=line; }
+      }
+      if(bestLine) snippet = bestLine.text;
+    }
+    results.push({song: e.song, score, snippet});
+  }
+  return results.sort((a,b)=>b.score-a.score || a.song.title.localeCompare(b.song.title,'de'));
 }
 
 // Mit Interpret: „Interpret · Jahr“ (Songwriter separat). Ohne Interpret (z.B. Choräle):
@@ -420,13 +506,16 @@ function ListCard({list, count, onOpen}){
   );
 }
 
-function HomeView({collection, myLists, favorites, onOpenList, onImportFile, onClear, onCreateMyList}){
+function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenSong, onOpenList, onImportFile, onClear, onCreateMyList}){
   const [showClear,setShowClear] = useState(false);
   const [showNewList,setShowNewList] = useState(false);
   const fileRef = useRef(null);
   const songs = collection ? collection.songs : {};
   const songCount = collection ? Object.keys(collection.songs).length : 0;
   const openFile = ()=>fileRef.current && fileRef.current.click();
+  const searchIndex = useMemo(()=>buildSearchIndex(songs), [songs]);
+  const results = useMemo(()=>searchSongs(searchIndex, query), [searchIndex, query]);
+  const searching = query.trim().length>0;
   return (
     <React.Fragment>
       <Header title="Lyrics-Liste" right={
@@ -445,6 +534,31 @@ function HomeView({collection, myLists, favorites, onOpenList, onImportFile, onC
           </div>}
         {songCount===0 && <div className="stand">App-Version: {formatVersion(APP_VERSION)}</div>}
         {songCount>0 &&
+          <div className="search">
+            <input type="text" enterKeyHint="search" autoComplete="off" placeholder="Lieder durchsuchen (Titel, Text, Interpret)…" value={query}
+              onChange={e=>onQueryChange(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Escape') onQueryChange(''); }} />
+            {searching && <button className="search-clear" title="Suche löschen" onClick={()=>onQueryChange('')}>&#10005;</button>}
+          </div>}
+        {songCount>0 && searching &&
+          <React.Fragment>
+            {results.length===0
+              ? <div className="empty">Kein Lied gefunden.</div>
+              : <div className="hint">{results.length===1 ? '1 Lied gefunden' : `${results.length} Lieder gefunden`}</div>}
+            <ul className="song-list">
+              {results.map(r=>(
+                <li className="song-item" key={r.song.id} onClick={()=>onOpenSong(r.song.id)}>
+                  <div className="title">
+                    <span className="song-name">{r.song.title}</span>
+                    {listSubline(r.song) && <span className="artist">{listSubline(r.song)}</span>}
+                    {r.snippet && <span className="snippet">„{r.snippet}“</span>}
+                  </div>
+                  <div className="chev">&#8250;</div>
+                </li>
+              ))}
+            </ul>
+          </React.Fragment>}
+        {songCount>0 && !searching &&
           <React.Fragment>
             <div className="card card-fav">
               <div className="card-row" onClick={()=>onOpenList(FAV_ID)}>
@@ -991,6 +1105,7 @@ function App(){
   const [phase,setPhase] = useState('home');
   const [activeListId,setActiveListId] = useState(null);
   const [activeSongId,setActiveSongId] = useState(null);
+  const [searchQuery,setSearchQuery] = useState('');
   const [pendingImport,setPendingImport] = useState(null);
   const [importError,setImportError] = useState('');
 
@@ -1089,7 +1204,7 @@ function App(){
   else if(phase==='song' && activeSong){
     view = <SongView song={activeSong} myLists={myLists}
       isFavorite={favorites.includes(activeSong.id)} onToggleFavorite={()=>toggleFavorite(activeSong.id)}
-      onBack={()=>{ setActiveSongId(null); setPhase('list'); }}
+      onBack={()=>{ setActiveSongId(null); setPhase(activeListId ? 'list' : 'home'); }}
       fontIndex={fontIndex} onFontChange={changeFont}
       onToggleList={toggleSongInList} onCreateListWithSong={createMyListWithSong} />;
   }
@@ -1099,6 +1214,8 @@ function App(){
   }
   else {
     view = <HomeView collection={collection} myLists={myLists} favorites={favorites}
+      query={searchQuery} onQueryChange={setSearchQuery}
+      onOpenSong={id=>{ setActiveListId(null); setActiveSongId(id); setPhase('song'); }}
       onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
       onImportFile={handleImportFile}
       onClear={clearAll}

@@ -93,7 +93,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **React-Komponenten (in index.html):**
 - `App` — verwaltet `phase` (`home`, `list`, `song`, `print`), `collection`, Import
-- `HomeView` — „Favoriten", „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
+- `HomeView` — Suchfeld (Volltextsuche nur auf dem Gerät: `buildSearchIndex`/`searchSongs`,
+  fehlertolerant, ohne Netz und ohne KI-Dienst – Texte dürfen das Gerät nicht verlassen; Treffer
+  mit Fundstelle, Suchbegriff bleibt in `App` erhalten), „Favoriten", „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
   Import-Button, alles entfernen, Stand-Datum
 - `ListView` — Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
   eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
