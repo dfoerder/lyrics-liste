@@ -18,7 +18,12 @@ Entscheid des Besitzers (13.10.2026, Familiengebrauch nach Art. 19 URG):
   selbst gewählte Empfänger (WhatsApp-Familiengruppe). Kein Upload, kein öffentlicher Link,
   kein Server, keine Suche im Netz oder KI-Dienst – Texte gehen nur von Gerät zu Gerät.
 - Ein **Import führt zusammen**: neue Lieder kommen dazu, gleiche ids werden durch die
-  Fassung aus der Datei ersetzt, alles andere bleibt. Gelöschtes verschwindet deshalb
+  Fassung aus der Datei ersetzt, alles andere bleibt. Jede Textfassung hat einen Zeitstempel
+  `updated` (UTC `JJJJ-MM-TTThh:mm:ssZ`, unter dem Text als „Textstand …“). Ist die Fassung
+  auf dem Gerät neuer (oder selbst bearbeitet ohne Zeitstempel), fragt `ImportDialog` je Lied,
+  welche bleibt (`analyzeImport`, `mergeCollection(…, keepDeviceIds)`). `lieder.py` setzt
+  `updated` beim Aufnehmen und bei geändertem Text/Angaben; `uebernehmen` übergeht bei
+  `--alle` Lieder, deren Mac-Fassung neuer ist. Der Export-Vergleich ignoriert `updated`. Gelöschtes verschwindet deshalb
   nicht durch einen Import, nur über 🗑 (alles entfernen) oder „Lied löschen“.
 
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
@@ -44,7 +49,7 @@ Geräten sieht, ob die neue Version geladen ist. Mehrere Änderungen am selben T
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
 `{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
-performer, year, lyrics, scores?, voices?, link?}]}` — `lists` optional. `scores` = optionale Liste von
+performer, year, lyrics, updated?, scores?, voices?, link?}]}` — `lists` optional. `scores` = optionale Liste von
 Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
 `voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
 (`data:audio/midi;base64,…`), Reihenfolge Sopran, Alt, Tenor, Bass. Ältere App-Stände

@@ -49,6 +49,33 @@ def today():
     return datetime.date.today().isoformat()
 
 
+def now_stamp():
+    """Zeitstempel der Textfassung (UTC, wie in der App) – zeigt beim Import, welche Fassung neuer ist."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def stamp_time(s):
+    try:
+        return datetime.datetime.strptime(s or '', '%Y-%m-%dT%H:%M:%SZ')
+    except ValueError:
+        return datetime.datetime.min
+
+
+CONTENT_KEYS = ('title', 'performer', 'writers', 'year', 'lyrics')
+
+
+def same_content(a, b):
+    return all((a.get(k) or '') == (b.get(k) or '') for k in CONTENT_KEYS)
+
+
+def stamp(song, old=None):
+    """Neuer Zeitstempel, wenn sich Text oder Angaben gegenüber old geändert haben."""
+    if old is not None and same_content(song, old) and old.get('updated'):
+        song['updated'] = old['updated']
+    else:
+        song['updated'] = now_stamp()
+
+
 def load(path):
     if not path.exists():
         return empty_collection()
@@ -464,6 +491,7 @@ def cmd_hinzufuegen(args, data):
 
     if args.probelauf:
         return False
+    stamp(song, existing)
     if existing:
         data['songs'][data['songs'].index(existing)] = song
     else:
@@ -495,6 +523,7 @@ def add_to_list(data, name, ids):
 
 def cmd_bearbeiten(args, data):
     s = require_song(data, args.id)
+    before = dict(s)
     for field, value in (('title', args.titel), ('writers', args.songwriter),
                          ('performer', args.interpret), ('year', args.jahr)):
         if value is not None:
@@ -504,6 +533,8 @@ def cmd_bearbeiten(args, data):
             s['link'] = check_link(args.link)
         else:
             s.pop('link', None)                  # --link "" entfernt den Link
+    if not same_content(s, before):
+        s['updated'] = now_stamp()
     print(f'Geändert: {song_line(s)}' + (f' | Songwriter: {s["writers"]}' if s['writers'] else '')
           + (f' | Link: {s["link"]}' if s.get('link') else ''))
     return True
@@ -763,7 +794,8 @@ def diff(old, new):
     new_songs = {s['id']: s for s in new['songs']}
     added = [new_songs[i] for i in new_songs if i not in old_songs]
     removed = [old_songs[i] for i in old_songs if i not in new_songs]
-    changed = [new_songs[i] for i in new_songs if i in old_songs and new_songs[i] != old_songs[i]]
+    strip = lambda s: {k: v for k, v in s.items() if k != 'updated'}   # nur Zeitstempel neu → keine Änderung
+    changed = [new_songs[i] for i in new_songs if i in old_songs and strip(new_songs[i]) != strip(old_songs[i])]
     old_lists = {l['id']: l for l in old.get('lists', [])}
     lists = []
     for l in new['lists']:
@@ -1017,6 +1049,7 @@ def cmd_aus_ordner(args, data):
         print(f'ANDERE VERSION in der Sammlung: {song_line(s)} (id {s["id"]})')
     if args.probelauf:
         return False
+    stamp(song, existing)
     if existing:
         data['songs'][data['songs'].index(existing)] = song
     else:
@@ -1077,6 +1110,8 @@ def cmd_uebernehmen(args, data):
             continue
         diffs = [name for key, name in APP_FIELDS if (s.get(key) or '') != (old.get(key) or '')]
         if diffs:
+            if stamp_time(old.get('updated')) > stamp_time(s.get('updated')):
+                diffs.append('MAC_NEUER')
             changed.append((s, old, diffs))
         else:
             same += 1
@@ -1098,7 +1133,9 @@ def cmd_uebernehmen(args, data):
                 info.append(f'Text ({a} → {b} Zeilen)')
             else:
                 info.append(f'{name}: „{old.get(key) or "–"}“ → „{s.get(key) or "–"}“')
-        print(f'  GEÄNDERT: [{s["id"]}] {song_line(old)}: ' + '; '.join(info))
+        when = f' | Fassung App {s.get("updated") or "ohne Zeitstempel"}, Mac {old.get("updated") or "ohne Zeitstempel"}'
+        warn = ' | ACHTUNG: die Fassung auf dem Mac ist neuer – bei --alle übergangen, nur mit --id' if 'MAC_NEUER' in diffs else ''
+        print(f'  GEÄNDERT: [{s["id"]}] {song_line(old)}: ' + '; '.join(info) + when + warn)
     if not (args.alle or wanted):
         if new or changed:
             print('Nichts übernommen. Mit --alle alles übernehmen oder mit --id <id> … einzelne Lieder.')
@@ -1107,6 +1144,7 @@ def cmd_uebernehmen(args, data):
     for s in new:
         if args.alle or s['id'] in wanted:
             song = {k: (s.get(k) or '') for k in ('id', 'title', 'writers', 'performer', 'year', 'lyrics')}
+            song['updated'] = s.get('updated') or now_stamp()
             for extra in ('scores', 'voices', 'link'):
                 if s.get(extra):
                     song[extra] = s[extra]
@@ -1116,9 +1154,10 @@ def cmd_uebernehmen(args, data):
             print(f'Übernommen (neu): {song_line(song)}' + (f' → Listen: {", ".join(args.liste)}' if args.liste else ''))
             applied += 1
     for s, old, diffs in changed:
-        if args.alle or s['id'] in wanted:
+        if s['id'] in wanted or (args.alle and 'MAC_NEUER' not in diffs):
             for key, _ in APP_FIELDS:
                 old[key] = s.get(key) or ''
+            old['updated'] = s.get('updated') or now_stamp()
             print(f'Übernommen (geändert): {song_line(old)}')
             applied += 1
     unknown = wanted - {s['id'] for s in new} - {s['id'] for s, _, _ in changed}

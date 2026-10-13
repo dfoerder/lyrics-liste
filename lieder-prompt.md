@@ -73,6 +73,8 @@ FELDER:
   über das Skript tools/lieder.py eingebettet – bestehende voices unverändert übernehmen.
 - (Hinweis: Ein Import in der App führt zusammen – neue Lieder kommen dazu, gleiche ids
   werden ersetzt. Lied-ids deshalb nie ändern.)
+- updated: Zeitstempel der Textfassung (UTC, z.B. 2026-10-13T11:41:46Z). Bei geändertem
+  Text oder geänderten Angaben neu setzen, sonst unverändert lassen.
 - link: optional, https-Link zum Anhören der Version (Spotify, YouTube, …). Nur vom Nutzer
   übernehmen, nicht selbst suchen oder raten. Die App zeigt dafür „▶ Song spielen“.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds

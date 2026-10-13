@@ -88,6 +88,13 @@ a.btn{display:inline-block;text-decoration:none}
 .editor-row .field{flex:1;min-width:0}
 .editor-row .field.year{flex:0 0 6rem}
 .danger-text{color:#b03a2e;margin-top:.5rem}
+.text-stamp{font-size:.72rem;color:var(--muted);margin-top:1.2rem}
+.conflicts{max-height:45vh;overflow-y:auto;margin-bottom:1rem}
+.conflict{border:1px solid var(--border);border-radius:.5rem;padding:.6rem .7rem;margin-bottom:.5rem}
+.conflict .name{font-weight:600;font-size:.92rem;margin-bottom:.4rem}
+.conflict .choice{display:flex;gap:.4rem}
+.conflict .choice button{flex:1;font-size:.78rem;padding:.4rem .5rem;line-height:1.3}
+.conflict .choice .on{border-color:var(--accent);color:var(--accent-dark);background:var(--accent-bg)}
 .edited-note{font-size:.78rem;color:var(--muted);margin:-.6rem 0 1rem}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
@@ -191,7 +198,7 @@ const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 const LS_FAVORITES = 'lyrics-favoriten';
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-13-2';
+const APP_VERSION = '2026-10-13-3';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -409,6 +416,7 @@ function parseCollection(text){
       .map(v=>({name: str(v.name), midi: v.midi}));
     if(voices.length) songs[id].voices = voices;
     if(/^https:\/\/\S+$/.test(str(s.link))) songs[id].link = str(s.link);
+    if(str(s.updated) && !isNaN(Date.parse(str(s.updated)))) songs[id].updated = str(s.updated);
   });
   if(Object.keys(songs).length===0) throw new Error('Die Datei enthält keine Lieder.');
   const lists = (Array.isArray(data.lists) ? data.lists : [])
@@ -417,10 +425,40 @@ function parseCollection(text){
   return {created: str(data.created), lists, songs};
 }
 
+// Zeitstempel der Textfassung (UTC, sekundengenau) – damit lässt sich beim Import erkennen,
+// welche Fassung neuer ist. Lieder ohne Zeitstempel gelten als älter als jedes mit.
+function nowStamp(){ return new Date().toISOString().replace(/\.\d+Z$/,'Z'); }
+function stampTime(s){ const t = Date.parse(s||''); return isNaN(t) ? -Infinity : t; }
+function formatStamp(s){
+  const t = stampTime(s);
+  if(t===-Infinity) return 'ohne Zeitstempel';
+  return new Date(t).toLocaleString('de-CH', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+const CONTENT_FIELDS = ['title','performer','writers','year','lyrics'];
+function sameContent(a, b){ return CONTENT_FIELDS.every(k=>(a[k]||'')===(b[k]||'')); }
+
+// Vergleicht eine Import-Datei mit dem Gerät: neu, wird ersetzt, gleich, oder Konflikt
+// (auf dem Gerät gibt es eine neuere bzw. selbst bearbeitete Fassung ohne Zeitstempel).
+function analyzeImport(current, incoming){
+  const r = {added: [], updated: [], same: [], conflicts: []};
+  Object.values(incoming.songs).forEach(f=>{
+    const d = current && current.songs[f.id];
+    if(!d) r.added.push(f.id);
+    else if(sameContent(d, f)) r.same.push(f.id);
+    else if(stampTime(d.updated) > stampTime(f.updated) || (d.edited && !d.updated)) r.conflicts.push(f.id);
+    else r.updated.push(f.id);
+  });
+  return r;
+}
+
 // Import führt zusammen: neue Lieder kommen dazu, gleiche ids werden durch die Fassung
 // aus der Datei ersetzt, alles andere auf dem Gerät bleibt. Listen ebenso nach id.
-function mergeCollection(current, incoming){
-  const songs = {...(current ? current.songs : {}), ...incoming.songs};
+function mergeCollection(current, incoming, keepDeviceIds){
+  const keep = new Set(keepDeviceIds||[]);
+  const songs = {...(current ? current.songs : {})};
+  Object.values(incoming.songs).forEach(s=>{
+    if(!keep.has(s.id)) songs[s.id] = s;
+  });
   const lists = (current ? current.lists : []).map(l=>incoming.lists.find(x=>x.id===l.id) || l);
   incoming.lists.forEach(l=>{ if(!lists.some(x=>x.id===l.id)) lists.push(l); });
   return {created: incoming.created || (current && current.created) || '', lists, songs};
@@ -439,7 +477,8 @@ function newSongId(title){
 // Lieder als Import-Datei über das Teilen-Fenster weitergeben (z.B. WhatsApp an die Familie).
 // Ohne Teilen-Funktion (Desktop) wird die Datei heruntergeladen.
 async function shareSongs({name, songs, lists}){
-  const clean = songs.map(({edited, ...s})=>s);
+  // Selbst bearbeitete Lieder ohne Zeitstempel (vor dieser Funktion bearbeitet) bekommen jetzt einen
+  const clean = songs.map(({edited, ...s})=>edited && !s.updated ? {...s, updated: nowStamp()} : s);
   const data = {type: FILE_TYPE, version: 2, created: new Date().toISOString().slice(0,10), lists: lists||[], songs: clean};
   const slug = slugify(name) || 'lieder';
   const file = new File([JSON.stringify(data)], `lieder-${slug}-${data.created}.json`, {type: 'application/json'});
@@ -483,6 +522,47 @@ function ShareChooser({collection, myLists, favorites, onShare, onClose}){
         </div>
         <div className="dialog-actions" style={{marginTop:'1rem'}}>
           <button className="btn btn-secondary" onClick={onClose}>Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportDialog({collection, pending, onImport, onCancel}){
+  const a = useMemo(()=>analyzeImport(collection, pending), [collection, pending]);
+  const [useFile,setUseFile] = useState({});          // id -> true = Fassung aus der Datei
+  const lists = pending.lists.length;
+  const n = Object.keys(pending.songs).length;
+  return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Lieder importieren?</h3>
+        <p>{lieder(n)}{lists ? ` in ${lists} ${lists===1?'Liste':'Listen'}` : ''}
+          {pending.created ? ` (Stand ${formatDate(pending.created)})` : ''}.
+          {collection && ` ${a.added.length} neu, ${a.updated.length} neuere ${a.updated.length===1?'Fassung':'Fassungen'}, ${a.same.length} unverändert.`
+            + ' Alle anderen Lieder und deine eigenen Listen bleiben erhalten.'}</p>
+        {a.conflicts.length>0 && <React.Fragment>
+          <p><strong>Auf diesem Gerät gibt es neuere Fassungen.</strong> Welche möchtest du behalten?</p>
+          <div className="conflicts">
+            {a.conflicts.map(id=>{
+              const d = collection.songs[id], f = pending.songs[id], file = !!useFile[id];
+              return (
+                <div className="conflict" key={id}>
+                  <div className="name">{d.title}{f.title!==d.title ? ` / ${f.title}` : ''}</div>
+                  <div className="choice">
+                    <button className={'btn btn-secondary' + (!file ? ' on' : '')} onClick={()=>setUseFile({...useFile, [id]: false})}>
+                      Auf diesem Gerät<br/>{d.updated ? formatStamp(d.updated) : 'bearbeitet, ohne Zeitangabe'}</button>
+                    <button className={'btn btn-secondary' + (file ? ' on' : '')} onClick={()=>setUseFile({...useFile, [id]: true})}>
+                      Aus der Datei<br/>{formatStamp(f.updated)}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </React.Fragment>}
+        <div className="dialog-actions">
+          <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={()=>onImport(a.conflicts.filter(id=>!useFile[id]))}>Importieren</button>
         </div>
       </div>
     </div>
@@ -1137,7 +1217,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
     if(!f.title.trim() || saving) return;
     setSaving(true);
     const ok = await onSave({...song, id: song.id || newSongId(f.title), title: f.title.trim(), performer: f.performer.trim(),
-      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true});
+      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true, updated: nowStamp()});
     if(!ok) setSaving(false);
   }
   return (
@@ -1153,8 +1233,8 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
           <textarea value={f.lyrics} onChange={set('lyrics')} /></div>
-        <div className="hint">Die Änderung gilt nur auf diesem Gerät. Kommt das Lied mit einer Lieder-Datei
-          erneut, gilt die Fassung aus der Datei. Weitergeben kannst du es mit 📤 auf der Startseite oder im Lied.</div>
+        <div className="hint">Die Änderung gilt nur auf diesem Gerät und bekommt einen Zeitstempel. Bringt eine
+          Lieder-Datei später eine ältere Fassung, fragt der Import, welche du behalten willst. Weitergeben kannst du es mit 📤 auf der Startseite oder im Lied.</div>
         {!isNew && onDelete && <button className="btn btn-secondary danger-text" onClick={()=>setConfirmDelete(true)}>Lied löschen</button>}
       </div>
       {confirmDelete && <Confirm title="Lied löschen?"
@@ -1196,10 +1276,11 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite,
           <button className="btn btn-secondary" onClick={()=>onShare({name: song.title, songs: [song], lists: []})}>&#128228; Weitergeben</button>
           {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
         </div>
-        {song.edited && <div className="edited-note no-print">Auf diesem Gerät bearbeitet – kommt das Lied mit einer Lieder-Datei erneut, gilt deren Fassung.</div>}
+        {song.edited && <div className="edited-note no-print">Auf diesem Gerät bearbeitet. Bringt eine Lieder-Datei eine ältere Fassung, wirst du beim Import gefragt.</div>}
         {song.voices && song.voices.length>0 && <VoicePlayer key={song.id} voices={song.voices} />}
         <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
         {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
+        {song.updated && <div className="text-stamp">Textstand {formatStamp(song.updated)}</div>}
       </div>
       {showScores && <ScoreViewer scores={song.scores} title={song.title} onClose={()=>setShowScores(false)} />}
       {showChooser && <ListChooser song={song} myLists={myLists}
@@ -1285,8 +1366,8 @@ function App(){
       setImportError(e.message || 'Import fehlgeschlagen.');
     }
   }
-  async function confirmImport(){
-    const next = {...mergeCollection(collection, pendingImport), importedAt: new Date().toISOString()};
+  async function confirmImport(keepDeviceIds){
+    const next = {...mergeCollection(collection, pendingImport, keepDeviceIds), importedAt: new Date().toISOString()};
     setPendingImport(null);
     try{
       await saveCollection(next);   // erst speichern, dann anzeigen – bei vollem Speicher bleibt der alte Stand
@@ -1403,25 +1484,11 @@ function App(){
       onCreateMyList={createMyList} />;
   }
 
-  const pendingCount = pendingImport ? Object.keys(pendingImport.songs).length : 0;
-  const pendingLists = pendingImport ? pendingImport.lists.length : 0;
-  const pendingIds = pendingImport ? Object.keys(pendingImport.songs) : [];
-  const newCount = collection ? pendingIds.filter(id=>!collection.songs[id]).length : pendingIds.length;
-  const replacedCount = pendingIds.length - newCount;
-  const editedCount = collection ? pendingIds.filter(id=>collection.songs[id] && collection.songs[id].edited).length : 0;
-
   return (
     <React.Fragment>
       {view}
-      {pendingImport && <Confirm title="Lieder importieren?"
-        message={`${pendingCount} ${pendingCount===1?'Lied':'Lieder'}`
-          + (pendingLists ? ` in ${pendingLists} ${pendingLists===1?'Liste':'Listen'}` : '')
-          + (pendingImport.created ? ` (Stand ${formatDate(pendingImport.created)})` : '')
-          + '.'
-          + (collection ? ` ${newCount} neu, ${replacedCount} ${replacedCount===1 ? 'ersetzt' : 'ersetzen'} die Fassung auf diesem Gerät. Alle anderen Lieder und deine eigenen Listen bleiben erhalten.` : '')
-          + (editedCount ? ` ${editedCount===1 ? '1 Lied, das du bearbeitet hast, wird' : editedCount+' Lieder, die du bearbeitet hast, werden'} dabei überschrieben.` : '')}
-        confirmLabel="Importieren"
-        onConfirm={confirmImport}
+      {pendingImport && <ImportDialog collection={collection} pending={pendingImport}
+        onImport={confirmImport}
         onCancel={()=>setPendingImport(null)} />}
       {saveError && <Confirm title="Hat nicht geklappt" message={saveError}
         confirmLabel="OK"
