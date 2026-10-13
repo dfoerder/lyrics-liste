@@ -6,8 +6,9 @@ description: Bereitet den Versand der Lieder-Datei der Lyrics-Liste per WhatsApp
 # Lieder verschicken
 
 Die Familie importiert die Lieder-Datei in die Lyrics-Liste
-(https://dfoerder.github.io/lyrics-liste/). Ein Import **ersetzt** alles auf dem Gerät.
-Deshalb wird immer die komplette Sammlung verschickt, nie nur die neuen Lieder.
+(https://dfoerder.github.io/lyrics-liste/). Ein Import **führt zusammen**: neue Lieder
+kommen dazu, gleiche Lieder werden ersetzt, alles andere bleibt. Verschickt wird trotzdem
+immer die komplette Sammlung, damit neue Geräte alles bekommen und Listen vollständig sind.
 
 ## Ablauf
 
@@ -55,6 +56,14 @@ Deshalb wird immer die komplette Sammlung verschickt, nie nur die neuen Lieder.
 6. **Dem Nutzer sagen, was noch zu tun ist:** die Datei aus dem Finder in den Chat der
    Familiengruppe ziehen, den Text mit ⌘V einfügen und senden. Zeig ihm den Begleittext
    auch im Chat, damit er ihn vor dem Senden sieht.
+
+## Gelöschte Lieder
+
+Ein Import führt zusammen: Lieder, die auf dem Mac gelöscht wurden, bleiben auf den Geräten,
+bis man dort 🗑 (alles entfernen) antippt und danach importiert. Meldet der Export
+„entfernt: …“, schreib das in den Begleittext, zum Beispiel: „Weil Lieder entfernt wurden:
+vor dem Import oben rechts 🗑 antippen (eigene Listen und Favoriten bleiben).“ Achtung:
+🗑 löscht auch Lieder, die jemand in der App selbst angelegt hat. Erwähne das kurz.
 
 ## Warum Claude nicht selbst sendet
 

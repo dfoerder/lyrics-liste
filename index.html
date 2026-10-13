@@ -87,6 +87,7 @@ a.btn{display:inline-block;text-decoration:none}
 .editor-row{display:flex;gap:.6rem}
 .editor-row .field{flex:1;min-width:0}
 .editor-row .field.year{flex:0 0 6rem}
+.danger-text{color:#b03a2e;margin-top:.5rem}
 .edited-note{font-size:.78rem;color:var(--muted);margin:-.6rem 0 1rem}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
@@ -190,7 +191,7 @@ const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 const LS_FAVORITES = 'lyrics-favoriten';
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-13';
+const APP_VERSION = '2026-10-13-2';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -416,6 +417,78 @@ function parseCollection(text){
   return {created: str(data.created), lists, songs};
 }
 
+// Import führt zusammen: neue Lieder kommen dazu, gleiche ids werden durch die Fassung
+// aus der Datei ersetzt, alles andere auf dem Gerät bleibt. Listen ebenso nach id.
+function mergeCollection(current, incoming){
+  const songs = {...(current ? current.songs : {}), ...incoming.songs};
+  const lists = (current ? current.lists : []).map(l=>incoming.lists.find(x=>x.id===l.id) || l);
+  incoming.lists.forEach(l=>{ if(!lists.some(x=>x.id===l.id)) lists.push(l); });
+  return {created: incoming.created || (current && current.created) || '', lists, songs};
+}
+
+function slugify(s){
+  return (s||'').toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+}
+
+function newSongId(title){
+  const slug = slugify(title).slice(0,40) || 'lied';
+  return 'app-' + slug + '-' + Math.random().toString(36).slice(2,6);
+}
+
+// Lieder als Import-Datei über das Teilen-Fenster weitergeben (z.B. WhatsApp an die Familie).
+// Ohne Teilen-Funktion (Desktop) wird die Datei heruntergeladen.
+async function shareSongs({name, songs, lists}){
+  const clean = songs.map(({edited, ...s})=>s);
+  const data = {type: FILE_TYPE, version: 2, created: new Date().toISOString().slice(0,10), lists: lists||[], songs: clean};
+  const slug = slugify(name) || 'lieder';
+  const file = new File([JSON.stringify(data)], `lieder-${slug}-${data.created}.json`, {type: 'application/json'});
+  const text = `Lieder für die Lyrics-Liste: ${name} (${lieder(clean.length)}). `
+    + 'Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts 📥 antippen. '
+    + 'App: https://dfoerder.github.io/lyrics-liste/';
+  if(navigator.canShare && navigator.canShare({files: [file]})){
+    try{ await navigator.share({files: [file], title: `Lieder: ${name}`, text}); }
+    catch(e){ if(e.name!=='AbortError') throw e; }
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+function ShareChooser({collection, myLists, favorites, onShare, onClose}){
+  const songs = collection.songs;
+  const options = [
+    {label: 'Alle Lieder', songs: Object.values(songs), lists: collection.lists},
+    {label: '★ Favoriten', songs: favorites.map(id=>songs[id]).filter(Boolean), lists: []},
+    ...collection.lists.map(l=>({label: l.name, songs: l.songIds.map(id=>songs[id]).filter(Boolean), lists: [l]})),
+    ...myLists.map(l=>{
+      const present = l.songIds.filter(id=>songs[id]);
+      return {label: l.name, songs: present.map(id=>songs[id]), lists: [{id: l.id, name: l.name, songIds: present}]};
+    })
+  ].filter(o=>o.songs.length);
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Lieder weitergeben</h3>
+        <p>Was möchtest du schicken? Danach öffnet sich das Teilen-Fenster – dort WhatsApp und die Familiengruppe wählen.</p>
+        <div className="picker-list">
+          {options.map((o,i)=>(
+            <div className="picker-item" key={i} onClick={()=>onShare({name: o.label.replace('★ ',''), songs: o.songs, lists: o.lists})}>
+              {o.label}<div className="artist">{lieder(o.songs.length)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="dialog-actions" style={{marginTop:'1rem'}}>
+          <button className="btn btn-secondary" onClick={onClose}>Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Confirm({title, message, confirmLabel, danger, onConfirm, onCancel}){
   return (
     <div className="overlay" onClick={onCancel}>
@@ -511,9 +584,10 @@ function ListCard({list, count, onOpen}){
   );
 }
 
-function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenSong, onOpenList, onImportFile, onClear, onCreateMyList}){
+function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
   const [showClear,setShowClear] = useState(false);
   const [showNewList,setShowNewList] = useState(false);
+  const [showShare,setShowShare] = useState(false);
   const fileRef = useRef(null);
   const songs = collection ? collection.songs : {};
   const songCount = collection ? Object.keys(collection.songs).length : 0;
@@ -526,6 +600,7 @@ function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenS
       <Header title="Lyrics-Liste" right={
         <div style={{display:'flex',gap:'.2rem'}}>
           <button className="icon-btn" title="Lieder-Datei importieren" onClick={openFile}>&#128229;</button>
+          {songCount>0 && <button className="icon-btn" title="Lieder weitergeben" onClick={()=>setShowShare(true)}>&#128228;</button>}
           {songCount>0 && <button className="icon-btn" title="Alle Lieder von diesem Gerät entfernen" onClick={()=>setShowClear(true)}>&#128465;</button>}
         </div>
       } />
@@ -536,6 +611,7 @@ function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenS
           <div className="empty">
             Noch keine Lieder auf diesem Gerät.<br/>Importiere die Lieder-Datei, die du bekommen hast.
             <div><button className="btn btn-primary" onClick={openFile}>Datei importieren</button></div>
+            <div><button className="btn btn-secondary" onClick={onNewSong}>+ Neues Lied anlegen</button></div>
           </div>}
         {songCount===0 && <div className="stand">App-Version: {formatVersion(APP_VERSION)}</div>}
         {songCount>0 &&
@@ -598,6 +674,9 @@ function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenS
         confirmLabel="Entfernen" danger
         onConfirm={()=>{ setShowClear(false); onClear(); }}
         onCancel={()=>setShowClear(false)} />}
+      {showShare && <ShareChooser collection={collection} myLists={myLists} favorites={favorites}
+        onShare={sel=>{ setShowShare(false); onShare(sel); }}
+        onClose={()=>setShowShare(false)} />}
       {showNewList && <PromptDialog title="Neue Liste" label="Name der Liste" placeholder="z.B. Meine Lieblingslieder"
         confirmLabel="Anlegen"
         onSubmit={name=>{ setShowNewList(false); onCreateMyList(name); }}
@@ -612,7 +691,7 @@ function listSongs(list, songs){
   return list.own ? present : sortSongs(present);
 }
 
-function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete}){
+function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong}){
   const [showPicker,setShowPicker] = useState(false);
   const [showRename,setShowRename] = useState(false);
   const [showDelete,setShowDelete] = useState(false);
@@ -640,6 +719,7 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete}
       <div className="main">
         <div className="toolbar">
           {list.own && <button className="btn btn-primary" onClick={()=>setShowPicker(true)}>+ Lieder hinzufügen</button>}
+          {list.id===ALL_ID && <button className="btn btn-primary" onClick={onNewSong}>+ Neues Lied</button>}
           {orderedSongs.length>0 && <button className="btn btn-secondary" onClick={onPrint}>Drucken / Anzeigen</button>}
         </div>
         {missing>0 && <div className="hint">
@@ -1043,24 +1123,26 @@ function VoicePlayer({voices}){
 }
 
 // Lied auf diesem Gerät bearbeiten. Ein neuer Import überschreibt die Änderungen.
-function SongEditor({song, onSave, onCancel}){
+function SongEditor({song, onSave, onCancel, onDelete}){
   const [f,setF] = useState({title: song.title, performer: song.performer, writers: song.writers,
                               year: song.year, lyrics: song.lyrics});
   const [confirmDiscard,setConfirmDiscard] = useState(false);
+  const [confirmDelete,setConfirmDelete] = useState(false);
   const [saving,setSaving] = useState(false);
+  const isNew = !song.id;
   const changed = Object.keys(f).some(k=>f[k]!==song[k]);
   const set = k => e => setF({...f, [k]: e.target.value});
   function cancel(){ changed ? setConfirmDiscard(true) : onCancel(); }
   async function save(){
     if(!f.title.trim() || saving) return;
     setSaving(true);
-    const ok = await onSave({...song, title: f.title.trim(), performer: f.performer.trim(),
+    const ok = await onSave({...song, id: song.id || newSongId(f.title), title: f.title.trim(), performer: f.performer.trim(),
       writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true});
     if(!ok) setSaving(false);
   }
   return (
     <React.Fragment>
-      <Header title="Lied bearbeiten" onBack={cancel}
+      <Header title={isNew ? 'Neues Lied' : 'Lied bearbeiten'} onBack={cancel}
         right={<button className="btn btn-primary" disabled={!f.title.trim() || !changed || saving} onClick={save}>Speichern</button>} />
       <div className="main editor">
         <div className="field"><label>Titel</label><input value={f.title} onChange={set('title')} /></div>
@@ -1071,8 +1153,15 @@ function SongEditor({song, onSave, onCancel}){
         <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
           <textarea value={f.lyrics} onChange={set('lyrics')} /></div>
-        <div className="hint">Die Änderung gilt nur auf diesem Gerät. Eine neue Lieder-Datei überschreibt sie wieder.</div>
+        <div className="hint">Die Änderung gilt nur auf diesem Gerät. Kommt das Lied mit einer Lieder-Datei
+          erneut, gilt die Fassung aus der Datei. Weitergeben kannst du es mit 📤 auf der Startseite oder im Lied.</div>
+        {!isNew && onDelete && <button className="btn btn-secondary danger-text" onClick={()=>setConfirmDelete(true)}>Lied löschen</button>}
       </div>
+      {confirmDelete && <Confirm title="Lied löschen?"
+        message={`„${song.title}" wird von diesem Gerät gelöscht. Eigene Listen merken es sich – kommt es mit einer Lieder-Datei zurück, erscheint es wieder.`}
+        confirmLabel="Löschen" danger
+        onConfirm={onDelete}
+        onCancel={()=>setConfirmDelete(false)} />}
       {confirmDiscard && <Confirm title="Änderungen verwerfen?"
         message="Deine Änderungen an diesem Lied werden nicht gespeichert."
         confirmLabel="Verwerfen" danger
@@ -1082,14 +1171,14 @@ function SongEditor({song, onSave, onCancel}){
   );
 }
 
-function SongView({song, myLists, onSaveSong, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
+function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
   const [showScores,setShowScores] = useState(false);
   const [editing,setEditing] = useState(false);
   const hasScores = !!(song.scores && song.scores.length);
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
   if(editing){
-    return <SongEditor song={song} onCancel={()=>setEditing(false)}
+    return <SongEditor song={song} onCancel={()=>setEditing(false)} onDelete={onDeleteSong}
       onSave={async s=>{ const ok = await onSaveSong(s); if(ok) setEditing(false); return ok; }} />;
   }
   return (
@@ -1104,9 +1193,10 @@ function SongView({song, myLists, onSaveSong, isFavorite, onToggleFavorite, onBa
             {isFavorite ? '★ Favorit' : '☆ Zu Favoriten'}</button>
           {song.link && <a className="btn btn-secondary" href={song.link} target="_blank" rel="noopener noreferrer">&#9654; Song spielen</a>}
           <button className="btn btn-secondary" onClick={()=>setEditing(true)}>&#9998; Bearbeiten</button>
+          <button className="btn btn-secondary" onClick={()=>onShare({name: song.title, songs: [song], lists: []})}>&#128228; Weitergeben</button>
           {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
         </div>
-        {song.edited && <div className="edited-note no-print">Auf diesem Gerät bearbeitet – eine neue Lieder-Datei überschreibt das.</div>}
+        {song.edited && <div className="edited-note no-print">Auf diesem Gerät bearbeitet – kommt das Lied mit einer Lieder-Datei erneut, gilt deren Fassung.</div>}
         {song.voices && song.voices.length>0 && <VoicePlayer key={song.id} voices={song.voices} />}
         <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
         {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
@@ -1196,7 +1286,7 @@ function App(){
     }
   }
   async function confirmImport(){
-    const next = {...pendingImport, importedAt: new Date().toISOString()};
+    const next = {...mergeCollection(collection, pendingImport), importedAt: new Date().toISOString()};
     setPendingImport(null);
     try{
       await saveCollection(next);   // erst speichern, dann anzeigen – bei vollem Speicher bleibt der alte Stand
@@ -1230,7 +1320,8 @@ function App(){
     setMyLists(prev=>[...prev, {id: uid(), name, songIds: [songId]}]);
   }
   async function saveSong(song){
-    const next = {...collection, songs: {...collection.songs, [song.id]: song}};
+    const base = collection || {created: '', importedAt: new Date().toISOString(), lists: [], songs: {}};
+    const next = {...base, songs: {...base.songs, [song.id]: song}};
     try{
       await saveCollection(next);
     }catch(e){
@@ -1239,6 +1330,24 @@ function App(){
     }
     setCollection(next);
     return true;
+  }
+  async function deleteSong(id){
+    const songs = {...collection.songs};
+    delete songs[id];
+    const next = {...collection, songs, lists: collection.lists.map(l=>({...l, songIds: l.songIds.filter(x=>x!==id)}))};
+    try{ await saveCollection(next); }
+    catch(e){ setSaveError(e.message || 'Das Lied konnte nicht gelöscht werden.'); return; }
+    setCollection(next);
+    setActiveSongId(null);
+    setPhase(activeListId ? 'list' : 'home');
+  }
+  async function share(sel){
+    try{ await shareSongs(sel); }
+    catch(e){ setSaveError('Weitergeben hat nicht geklappt: ' + (e.message || e)); }
+  }
+  function newSong(){
+    setActiveSongId(null);
+    setPhase('new');
   }
   function toggleFavorite(songId){
     setFavorites(prev=>prev.includes(songId) ? prev.filter(x=>x!==songId) : [...prev, songId]);
@@ -1262,15 +1371,22 @@ function App(){
       onBack={goHome}
       onOpenSong={id=>{ setActiveSongId(id); setPhase('song'); }}
       onPrint={()=>setPhase('print')}
+      onNewSong={newSong}
       onUpdate={updateMyList}
       onDelete={deleteMyList} />;
   }
   else if(phase==='song' && activeSong){
     view = <SongView key={activeSong.id} song={activeSong} myLists={myLists} onSaveSong={saveSong}
+      onDeleteSong={()=>deleteSong(activeSong.id)} onShare={share}
       isFavorite={favorites.includes(activeSong.id)} onToggleFavorite={()=>toggleFavorite(activeSong.id)}
       onBack={()=>{ setActiveSongId(null); setPhase(activeListId ? 'list' : 'home'); }}
       fontIndex={fontIndex} onFontChange={changeFont}
       onToggleList={toggleSongInList} onCreateListWithSong={createMyListWithSong} />;
+  }
+  else if(phase==='new'){
+    view = <SongEditor song={{id: null, title: '', performer: '', writers: '', year: '', lyrics: ''}}
+      onCancel={()=>setPhase(activeListId ? 'list' : 'home')}
+      onSave={async s=>{ const ok = await saveSong(s); if(ok){ setActiveSongId(s.id); setPhase('song'); } return ok; }} />;
   }
   else if(phase==='print' && activeList){
     view = <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')}
@@ -1280,6 +1396,7 @@ function App(){
     view = <HomeView collection={collection} myLists={myLists} favorites={favorites}
       query={searchQuery} onQueryChange={setSearchQuery}
       onOpenSong={id=>{ setActiveListId(null); setActiveSongId(id); setPhase('song'); }}
+      onShare={share} onNewSong={newSong}
       onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
       onImportFile={handleImportFile}
       onClear={clearAll}
@@ -1288,7 +1405,10 @@ function App(){
 
   const pendingCount = pendingImport ? Object.keys(pendingImport.songs).length : 0;
   const pendingLists = pendingImport ? pendingImport.lists.length : 0;
-  const editedCount = collection ? Object.values(collection.songs).filter(s=>s.edited).length : 0;
+  const pendingIds = pendingImport ? Object.keys(pendingImport.songs) : [];
+  const newCount = collection ? pendingIds.filter(id=>!collection.songs[id]).length : pendingIds.length;
+  const replacedCount = pendingIds.length - newCount;
+  const editedCount = collection ? pendingIds.filter(id=>collection.songs[id] && collection.songs[id].edited).length : 0;
 
   return (
     <React.Fragment>
@@ -1297,13 +1417,13 @@ function App(){
         message={`${pendingCount} ${pendingCount===1?'Lied':'Lieder'}`
           + (pendingLists ? ` in ${pendingLists} ${pendingLists===1?'Liste':'Listen'}` : '')
           + (pendingImport.created ? ` (Stand ${formatDate(pendingImport.created)})` : '')
-          + (collection ? '. Ersetzt alle bisherigen Lieder und mitgeschickten Listen auf diesem Gerät.' : '.')
-          + (myLists.length ? ' Deine eigenen Listen bleiben erhalten.' : '')
+          + '.'
+          + (collection ? ` ${newCount} neu, ${replacedCount} ${replacedCount===1 ? 'ersetzt' : 'ersetzen'} die Fassung auf diesem Gerät. Alle anderen Lieder und deine eigenen Listen bleiben erhalten.` : '')
           + (editedCount ? ` ${editedCount===1 ? '1 Lied, das du bearbeitet hast, wird' : editedCount+' Lieder, die du bearbeitet hast, werden'} dabei überschrieben.` : '')}
         confirmLabel="Importieren"
         onConfirm={confirmImport}
         onCancel={()=>setPendingImport(null)} />}
-      {saveError && <Confirm title="Speichern fehlgeschlagen" message={saveError}
+      {saveError && <Confirm title="Hat nicht geklappt" message={saveError}
         confirmLabel="OK"
         onConfirm={()=>setSaveError('')}
         onCancel={()=>setSaveError('')} />}

@@ -2,8 +2,8 @@
 
 Die App enthält keine Lieder. Die Lieder-Datei entsteht auf dem Mac mit Claude
 und wird dann an die Familie geschickt und in der App importiert
-(📥 oben rechts). **Ein Import ersetzt alles**, was vorher auf dem Gerät war –
-die Datei muss also immer die komplette Sammlung enthalten.
+(📥 oben rechts). Ein Import führt zusammen (neue Lieder kommen dazu,
+gleiche ids werden ersetzt). Die Datei soll trotzdem immer die komplette Sammlung enthalten.
 
 ## Einrichtung (einmalig)
 
@@ -71,6 +71,8 @@ FELDER:
   tools/lieder.py eingebettet – bestehende scores unverändert übernehmen.
 - voices: optional, Übungsstimmen [{name, midi}] mit MIDI als data-URI. Werden nur
   über das Skript tools/lieder.py eingebettet – bestehende voices unverändert übernehmen.
+- (Hinweis: Ein Import in der App führt zusammen – neue Lieder kommen dazu, gleiche ids
+  werden ersetzt. Lied-ids deshalb nie ändern.)
 - link: optional, https-Link zum Anhören der Version (Spotify, YouTube, …). Nur vom Nutzer
   übernehmen, nicht selbst suchen oder raten. Die App zeigt dafür „▶ Song spielen“.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds

@@ -136,6 +136,24 @@ Ein Lied, das schon in der Sammlung ist, aber aus einer anderen Quelle stammt, v
 du mit seinen Dateien über `python3 tools/lieder.py verknuepfen "<gruppe>" <id>`. Danach
 gilt es als eingelesen.
 
+## Lieder aus der App übernehmen
+
+Familienmitglieder können in der App Lieder neu anlegen oder bearbeiten und mit 📤 als Datei
+weitergeben, meist in die WhatsApp-Gruppe. Der Nutzer sichert die Datei auf dem Mac, oft in
+`~/Downloads` (`lieder-…-JJJJ-MM-TT.json`). Sagt er nicht, wo, such die neueste:
+`ls -t ~/Downloads/lieder-*.json | head -3`.
+
+1. **Anzeigen:** `python3 tools/lieder.py uebernehmen <datei>`. Die Ausgabe zeigt NEU und
+   GEÄNDERT mit den geänderten Angaben und Zeilenzahlen, nie Texte. Ein NEU-Lied mit
+   „gleicher Titel wie …“ ist oft eine in der App neu angelegte Fassung eines vorhandenen
+   Liedes. Frag dann, ob es ein eigenes Lied werden soll oder ob nur der Text ins vorhandene
+   übernommen werden soll; Letzteres geht über die Vorschau und `--ersetzen` mit kopiertem Text.
+2. **Fragen,** welche übernommen werden sollen und in welche Listen neue Lieder kommen.
+3. **Übernehmen:** `uebernehmen <datei> --id <id> … --liste "…"` oder `--alle`. Neue Lieder
+   behalten ihre id (`app-…`), damit sie in den Listen der Familie bleiben. Bei geänderten
+   Liedern werden Titel, Interpret, Songwriter, Jahr und Text ersetzt; Noten, Stimmen und Link
+   bleiben.
+
 ## Alternative: Text aus der Zwischenablage
 
 Nur, wenn der Nutzer ausdrücklich einen kopierten Text aufnehmen will, ohne Dateien in

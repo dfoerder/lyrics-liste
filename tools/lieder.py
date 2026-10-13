@@ -1051,6 +1051,82 @@ def cmd_ignorieren(args, data):
     return False
 
 
+# ---------------------------------------------------------------- Aus der App übernehmen
+
+APP_FIELDS = (('title', 'Titel'), ('performer', 'Interpret'), ('writers', 'Songwriter'), ('year', 'Jahr'), ('lyrics', 'Text'))
+
+
+def cmd_uebernehmen(args, data):
+    """Lieder aus einer Datei, die ein Familienmitglied aus der App weitergegeben hat, zeigen
+    und auf Wunsch übernehmen: neue Lieder anlegen, geänderte Angaben/Texte übernehmen."""
+    path = Path(args.app_datei).expanduser()
+    try:
+        incoming = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as err:
+        raise Fehler(f'{path}: nicht lesbar ({err})')
+    if incoming.get('type') != 'lyrics-liste-sammlung' or not isinstance(incoming.get('songs'), list):
+        raise Fehler(f'{path.name} ist keine Lieder-Datei der Lyrics-Liste.')
+    wanted = set(args.id or [])
+    new, changed, same = [], [], 0
+    for s in incoming['songs']:
+        if not s.get('id') or not s.get('title'):
+            continue
+        old = find_song(data, s['id'])
+        if not old:
+            new.append(s)
+            continue
+        diffs = [name for key, name in APP_FIELDS if (s.get(key) or '') != (old.get(key) or '')]
+        if diffs:
+            changed.append((s, old, diffs))
+        else:
+            same += 1
+    print(f'{path.name}: {lieder(len(incoming["songs"]))} – {len(new)} neu, {len(changed)} geändert, {same} gleich wie auf dem Mac')
+    for s in new:
+        total, _ = describe(s.get('lyrics', ''))
+        print(f'  NEU: [{s["id"]}] {song_line(s)} | {s.get("writers") or "Songwriter fehlt"} | {total} Zeilen')
+        for other in data['songs']:
+            if same_title(other['title'], s['title']):
+                print(f'       gleicher Titel wie [{other["id"]}] {song_line(other)} – evtl. eine bearbeitete Fassung davon')
+    for s, old, diffs in changed:
+        info = []
+        for key, name in APP_FIELDS:
+            if name not in diffs:
+                continue
+            if key == 'lyrics':
+                a, _ = describe(old.get('lyrics', ''))
+                b, _ = describe(s.get('lyrics', ''))
+                info.append(f'Text ({a} → {b} Zeilen)')
+            else:
+                info.append(f'{name}: „{old.get(key) or "–"}“ → „{s.get(key) or "–"}“')
+        print(f'  GEÄNDERT: [{s["id"]}] {song_line(old)}: ' + '; '.join(info))
+    if not (args.alle or wanted):
+        if new or changed:
+            print('Nichts übernommen. Mit --alle alles übernehmen oder mit --id <id> … einzelne Lieder.')
+        return False
+    applied = 0
+    for s in new:
+        if args.alle or s['id'] in wanted:
+            song = {k: (s.get(k) or '') for k in ('id', 'title', 'writers', 'performer', 'year', 'lyrics')}
+            for extra in ('scores', 'voices', 'link'):
+                if s.get(extra):
+                    song[extra] = s[extra]
+            data['songs'].append(song)
+            for name in args.liste or []:
+                add_to_list(data, name, [song['id']])
+            print(f'Übernommen (neu): {song_line(song)}' + (f' → Listen: {", ".join(args.liste)}' if args.liste else ''))
+            applied += 1
+    for s, old, diffs in changed:
+        if args.alle or s['id'] in wanted:
+            for key, _ in APP_FIELDS:
+                old[key] = s.get(key) or ''
+            print(f'Übernommen (geändert): {song_line(old)}')
+            applied += 1
+    unknown = wanted - {s['id'] for s in new} - {s['id'] for s, _, _ in changed}
+    for i in sorted(unknown):
+        print(f'HINWEIS: {i} ist weder neu noch geändert – nichts zu tun.')
+    return applied > 0
+
+
 # ---------------------------------------------------------------- CLI
 
 def main(argv=None):
@@ -1121,6 +1197,12 @@ def main(argv=None):
     i = sub.add_parser('ignorieren', help='Dateigruppe beim Scan übergehen')
     i.add_argument('gruppe')
 
+    u = sub.add_parser('uebernehmen', help='neue/geänderte Lieder aus einer App-Datei zeigen und übernehmen')
+    u.add_argument('app_datei', metavar='DATEI', help='aus der App weitergegebene Datei (z.B. aus WhatsApp gesichert)')
+    u.add_argument('--alle', action='store_true', help='alle neuen und geänderten Lieder übernehmen')
+    u.add_argument('--id', nargs='+', help='nur diese Lieder übernehmen')
+    u.add_argument('--liste', action='append', help='neue Lieder in diese Liste aufnehmen (mehrfach möglich)')
+
     sub.add_parser('uebersicht', help='alle Lieder und Listen ohne Text')
     v = sub.add_parser('vorschau', help='formatierte Texte im Browser ansehen')
     v.add_argument('ids', nargs='*')
@@ -1131,7 +1213,7 @@ def main(argv=None):
         args.gruppe = unicodedata.normalize('NFC', args.gruppe)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
                 'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'scan': cmd_scan,
-                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
+                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'uebernehmen': cmd_uebernehmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
     try:
         data = load(args.datei)
         if commands[args.befehl](args, data):

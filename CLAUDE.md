@@ -7,17 +7,19 @@ Hinweise für Claude Code (claude.ai/code) zur Arbeit in diesem Repository.
 **Lyrics-Liste** — eine PWA zum Anzeigen und Drucken von Liedtexten für die
 Familienandachten einer Familie (privater Gebrauch).
 
-Kernidee: Die App ist **ein reiner Viewer und beim Aufruf leer**. Lieder kommen
-ausschließlich über eine Import-Datei, die der Besitzer auf seinem Mac mit einem
-Claude-Prompt erstellt (Vorlage: `lieder-prompt.md`) und an die Familie schickt.
-Ein Import **ersetzt** alle Lieder und mitgeschickten Listen. In der App gibt es
-kein Anlegen, Online-Suchen oder Teilen/Exportieren von Liedern — bewusst so, aus
-rechtlichen Gründen. Solche Funktionen nicht wieder einbauen.
+Kernidee: Die App ist **beim Aufruf leer** (öffentlich nur eine leere Hülle). Lieder
+kommen über Lieder-Dateien: vom Besitzer auf seinem Mac erstellt (`tools/lieder.py`,
+Vorlage `lieder-prompt.md`) oder von Familienmitgliedern aus der App weitergegeben.
 
-**Bearbeiten** vorhandener Lieder ist erlaubt (Entscheid des Besitzers, 13.10.2026): Alle
-in der Familie können Titel, Interpret, Songwriter, Jahr und Text auf ihrem Gerät ändern.
-Die Änderung bleibt nur auf dem Gerät (`edited: true`), ein neuer Import überschreibt sie
-(der Import-Dialog warnt). Nichts davon verlässt das Gerät.
+Entscheid des Besitzers (13.10.2026, Familiengebrauch nach Art. 19 URG):
+- **Bearbeiten und neu anlegen** in der App ist erlaubt, für alle in der Familie. Die
+  Änderung bleibt auf dem Gerät (`edited: true`, neue Lieder mit id `app-…`).
+- **Weitergeben** aus der App ist erlaubt, aber nur als Datei über das Teilen-Fenster an
+  selbst gewählte Empfänger (WhatsApp-Familiengruppe). Kein Upload, kein öffentlicher Link,
+  kein Server, keine Suche im Netz oder KI-Dienst – Texte gehen nur von Gerät zu Gerät.
+- Ein **Import führt zusammen**: neue Lieder kommen dazu, gleiche ids werden durch die
+  Fassung aus der Datei ersetzt, alles andere bleibt. Gelöschtes verschwindet deshalb
+  nicht durch einen Import, nur über 🗑 (alles entfernen) oder „Lied löschen“.
 
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
@@ -70,6 +72,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `tools/noten_raster.swift` (Lesehilfe mit Tonhöhen-Raster) nachsehen; MIDI mit
   `tools/midi_schreiben.py`. `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
   rendert kleine Seiten mit mindestens 1100 px Breite.
+- `lieder.py uebernehmen <datei> [--alle | --id …] [--liste …]` — Datei aus der App (von der
+  Familie weitergegeben) mit der Sammlung vergleichen: NEU/GEÄNDERT anzeigen (ohne Texte) und
+  auf Wunsch übernehmen.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
 - `lieder-prompt.md` — Alternative für ein Claude-Projekt in der Claude-App.
@@ -115,8 +120,12 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `<audio>` im Hintergrund (`setSilentAudio`).
 - `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
   Zoomstufen
-- `SongEditor` — „✎ Bearbeiten“ im Lied: Titel, Interpret, Jahr, Songwriter, Text; speichert
-  über `saveSong` in IndexedDB, Verwerfen mit Rückfrage
+- `SongEditor` — „✎ Bearbeiten“ im Lied und „+ Neues Lied“ (Alle Lieder, leere Startseite;
+  `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text; speichert über `saveSong` in
+  IndexedDB, Verwerfen mit Rückfrage, „Lied löschen“ (`deleteSong`)
+- `ShareChooser` / `shareSongs` — 📤 auf der Startseite (Alle Lieder, Favoriten, eine Liste)
+  und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
+  `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
   ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
   „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
