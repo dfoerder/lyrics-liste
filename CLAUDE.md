@@ -11,8 +11,13 @@ Kernidee: Die App ist **ein reiner Viewer und beim Aufruf leer**. Lieder kommen
 ausschließlich über eine Import-Datei, die der Besitzer auf seinem Mac mit einem
 Claude-Prompt erstellt (Vorlage: `lieder-prompt.md`) und an die Familie schickt.
 Ein Import **ersetzt** alle Lieder und mitgeschickten Listen. In der App gibt es
-kein Anlegen, Bearbeiten, Online-Suchen oder Teilen/Exportieren von Liedern — bewusst
-so, aus rechtlichen Gründen. Solche Funktionen nicht wieder einbauen.
+kein Anlegen, Online-Suchen oder Teilen/Exportieren von Liedern — bewusst so, aus
+rechtlichen Gründen. Solche Funktionen nicht wieder einbauen.
+
+**Bearbeiten** vorhandener Lieder ist erlaubt (Entscheid des Besitzers, 13.10.2026): Alle
+in der Familie können Titel, Interpret, Songwriter, Jahr und Text auf ihrem Gerät ändern.
+Die Änderung bleibt nur auf dem Gerät (`edited: true`), ein neuer Import überschreibt sie
+(der Import-Dialog warnt). Nichts davon verlässt das Gerät.
 
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
@@ -110,6 +115,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `<audio>` im Hintergrund (`setSilentAudio`).
 - `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
   Zoomstufen
+- `SongEditor` — „✎ Bearbeiten“ im Lied: Titel, Interpret, Jahr, Songwriter, Text; speichert
+  über `saveSong` in IndexedDB, Verwerfen mit Rückfrage
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
   ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
   „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/

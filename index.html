@@ -83,6 +83,11 @@ a.btn{display:inline-block;text-decoration:none}
 .search input{width:100%;padding:.6rem 2.2rem .6rem .8rem;border:1px solid var(--border2);border-radius:.6rem;background:var(--bg-card);font-family:inherit;font-size:1rem;color:var(--text)}
 .search-clear{position:absolute;right:.3rem;top:50%;transform:translateY(-50%);width:1.8rem;height:1.8rem;color:var(--muted);border-radius:.4rem}
 .song-item .snippet{display:block;font-size:.8rem;color:var(--text2);margin-top:.15rem;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editor .field textarea{width:100%;min-height:55vh;padding:.6rem .7rem;border:1px solid var(--border2);border-radius:.5rem;background:var(--bg-card);font-family:inherit;font-size:1rem;line-height:1.5;color:var(--text);resize:vertical}
+.editor-row{display:flex;gap:.6rem}
+.editor-row .field{flex:1;min-width:0}
+.editor-row .field.year{flex:0 0 6rem}
+.edited-note{font-size:.78rem;color:var(--muted);margin:-.6rem 0 1rem}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
 .field{margin-bottom:1rem}
@@ -185,7 +190,7 @@ const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 const LS_FAVORITES = 'lyrics-favoriten';
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-08';
+const APP_VERSION = '2026-10-13';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1037,11 +1042,56 @@ function VoicePlayer({voices}){
   );
 }
 
-function SongView({song, myLists, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
+// Lied auf diesem Gerät bearbeiten. Ein neuer Import überschreibt die Änderungen.
+function SongEditor({song, onSave, onCancel}){
+  const [f,setF] = useState({title: song.title, performer: song.performer, writers: song.writers,
+                              year: song.year, lyrics: song.lyrics});
+  const [confirmDiscard,setConfirmDiscard] = useState(false);
+  const [saving,setSaving] = useState(false);
+  const changed = Object.keys(f).some(k=>f[k]!==song[k]);
+  const set = k => e => setF({...f, [k]: e.target.value});
+  function cancel(){ changed ? setConfirmDiscard(true) : onCancel(); }
+  async function save(){
+    if(!f.title.trim() || saving) return;
+    setSaving(true);
+    const ok = await onSave({...song, title: f.title.trim(), performer: f.performer.trim(),
+      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true});
+    if(!ok) setSaving(false);
+  }
+  return (
+    <React.Fragment>
+      <Header title="Lied bearbeiten" onBack={cancel}
+        right={<button className="btn btn-primary" disabled={!f.title.trim() || !changed || saving} onClick={save}>Speichern</button>} />
+      <div className="main editor">
+        <div className="field"><label>Titel</label><input value={f.title} onChange={set('title')} /></div>
+        <div className="editor-row">
+          <div className="field"><label>Interpret</label><input value={f.performer} onChange={set('performer')} /></div>
+          <div className="field year"><label>Jahr</label><input value={f.year} inputMode="numeric" onChange={set('year')} /></div>
+        </div>
+        <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
+        <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
+          <textarea value={f.lyrics} onChange={set('lyrics')} /></div>
+        <div className="hint">Die Änderung gilt nur auf diesem Gerät. Eine neue Lieder-Datei überschreibt sie wieder.</div>
+      </div>
+      {confirmDiscard && <Confirm title="Änderungen verwerfen?"
+        message="Deine Änderungen an diesem Lied werden nicht gespeichert."
+        confirmLabel="Verwerfen" danger
+        onConfirm={onCancel}
+        onCancel={()=>setConfirmDiscard(false)} />}
+    </React.Fragment>
+  );
+}
+
+function SongView({song, myLists, onSaveSong, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
   const [showScores,setShowScores] = useState(false);
+  const [editing,setEditing] = useState(false);
   const hasScores = !!(song.scores && song.scores.length);
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
+  if(editing){
+    return <SongEditor song={song} onCancel={()=>setEditing(false)}
+      onSave={async s=>{ const ok = await onSaveSong(s); if(ok) setEditing(false); return ok; }} />;
+  }
   return (
     <React.Fragment>
       <Header title={song.title} onBack={onBack}
@@ -1053,8 +1103,10 @@ function SongView({song, myLists, isFavorite, onToggleFavorite, onBack, fontInde
           <button className={'btn btn-secondary' + (isFavorite ? ' fav-on' : '')} onClick={onToggleFavorite}>
             {isFavorite ? '★ Favorit' : '☆ Zu Favoriten'}</button>
           {song.link && <a className="btn btn-secondary" href={song.link} target="_blank" rel="noopener noreferrer">&#9654; Song spielen</a>}
+          <button className="btn btn-secondary" onClick={()=>setEditing(true)}>&#9998; Bearbeiten</button>
           {inLists.length>0 && <span className="in">In: {inLists.join(', ')}</span>}
         </div>
+        {song.edited && <div className="edited-note no-print">Auf diesem Gerät bearbeitet – eine neue Lieder-Datei überschreibt das.</div>}
         {song.voices && song.voices.length>0 && <VoicePlayer key={song.id} voices={song.voices} />}
         <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
         {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
@@ -1108,6 +1160,7 @@ function App(){
   const [searchQuery,setSearchQuery] = useState('');
   const [pendingImport,setPendingImport] = useState(null);
   const [importError,setImportError] = useState('');
+  const [saveError,setSaveError] = useState('');
 
   useEffect(()=>{
     loadCollection().then(c=>{
@@ -1176,6 +1229,17 @@ function App(){
   function createMyListWithSong(name, songId){
     setMyLists(prev=>[...prev, {id: uid(), name, songIds: [songId]}]);
   }
+  async function saveSong(song){
+    const next = {...collection, songs: {...collection.songs, [song.id]: song}};
+    try{
+      await saveCollection(next);
+    }catch(e){
+      setSaveError(e.message || 'Das Lied konnte nicht gespeichert werden.');
+      return false;
+    }
+    setCollection(next);
+    return true;
+  }
   function toggleFavorite(songId){
     setFavorites(prev=>prev.includes(songId) ? prev.filter(x=>x!==songId) : [...prev, songId]);
   }
@@ -1202,7 +1266,7 @@ function App(){
       onDelete={deleteMyList} />;
   }
   else if(phase==='song' && activeSong){
-    view = <SongView song={activeSong} myLists={myLists}
+    view = <SongView key={activeSong.id} song={activeSong} myLists={myLists} onSaveSong={saveSong}
       isFavorite={favorites.includes(activeSong.id)} onToggleFavorite={()=>toggleFavorite(activeSong.id)}
       onBack={()=>{ setActiveSongId(null); setPhase(activeListId ? 'list' : 'home'); }}
       fontIndex={fontIndex} onFontChange={changeFont}
@@ -1224,6 +1288,7 @@ function App(){
 
   const pendingCount = pendingImport ? Object.keys(pendingImport.songs).length : 0;
   const pendingLists = pendingImport ? pendingImport.lists.length : 0;
+  const editedCount = collection ? Object.values(collection.songs).filter(s=>s.edited).length : 0;
 
   return (
     <React.Fragment>
@@ -1233,10 +1298,15 @@ function App(){
           + (pendingLists ? ` in ${pendingLists} ${pendingLists===1?'Liste':'Listen'}` : '')
           + (pendingImport.created ? ` (Stand ${formatDate(pendingImport.created)})` : '')
           + (collection ? '. Ersetzt alle bisherigen Lieder und mitgeschickten Listen auf diesem Gerät.' : '.')
-          + (myLists.length ? ' Deine eigenen Listen bleiben erhalten.' : '')}
+          + (myLists.length ? ' Deine eigenen Listen bleiben erhalten.' : '')
+          + (editedCount ? ` ${editedCount===1 ? '1 Lied, das du bearbeitet hast, wird' : editedCount+' Lieder, die du bearbeitet hast, werden'} dabei überschrieben.` : '')}
         confirmLabel="Importieren"
         onConfirm={confirmImport}
         onCancel={()=>setPendingImport(null)} />}
+      {saveError && <Confirm title="Speichern fehlgeschlagen" message={saveError}
+        confirmLabel="OK"
+        onConfirm={()=>setSaveError('')}
+        onCancel={()=>setSaveError('')} />}
       {importError && <Confirm title="Import fehlgeschlagen" message={importError}
         confirmLabel="OK"
         onConfirm={()=>setImportError('')}
