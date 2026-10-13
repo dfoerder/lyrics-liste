@@ -131,6 +131,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `ShareChooser` / `shareSongs` — 📤 auf der Startseite (Alle Lieder, Favoriten, eine Liste)
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
+- `SongMenu` — „⋯“ im Kopf der Liedansicht: Favoriten, Zu Liste hinzufügen, Stimmen üben
+  (blendet `VoicePlayer` ein, nur bei `voices`), Bearbeiten, Weitergeben. Darunter nur noch
+  „▶ Song spielen“ und eine Statuszeile (★ Favorit · In: … · bearbeitet)
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
   ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
   „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
@@ -145,7 +148,8 @@ Songtexte christlicher Lieder sind urheberrechtlich geschützt. Die App liefert 
 Texte liegen nur im Browser-Speicher der Familiengeräte. Keine Songtexte ins Repo
 committen (auch nicht als Beispiel- oder Testdaten). Lieder-Dateien gehören in den
 Ordner `privat/`, der per `.gitignore` von Git ausgenommen ist. Keine Features bauen,
-die Texte aus dem Netz beziehen, veröffentlichen oder aus der App heraus weitergeben.
+die Texte aus dem Netz beziehen oder veröffentlichen; Weitergeben nur wie oben beschrieben
+(Datei über das Teilen-Fenster an die Familie).
 
 ## Testen
 
