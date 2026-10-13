@@ -200,9 +200,11 @@ const LS_MY_LISTS = 'lyrics-eigene-listen';
 const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 // Favoriten: Lied-ids in eigener Reihenfolge, pro Gerät, bleiben beim Import erhalten
 const LS_FAVORITES = 'lyrics-favoriten';
+// Noten in der Liedansicht anzeigen (true/false), pro Gerät für alle Lieder gemerkt
+const LS_SHOW_SCORES = 'lyrics-noten-zeigen';
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-13-4';
+const APP_VERSION = '2026-10-13-6';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -487,7 +489,7 @@ async function shareSongs({name, songs, lists}){
   const slug = slugify(name) || 'lieder';
   const file = new File([JSON.stringify(data)], `lieder-${slug}-${data.created}.json`, {type: 'application/json'});
   const text = `Lieder für die Lyrics-Liste: ${name} (${lieder(clean.length)}). `
-    + 'Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts 📥 antippen. '
+    + 'Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts ⋯ → „Lieder importieren“. '
     + 'App: https://dfoerder.github.io/lyrics-liste/';
   if(navigator.canShare && navigator.canShare({files: [file]})){
     try{ await navigator.share({files: [file], title: `Lieder: ${name}`, text}); }
@@ -682,11 +684,11 @@ function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenS
   return (
     <React.Fragment>
       <Header title="Lyrics-Liste" right={
-        <div style={{display:'flex',gap:'.2rem'}}>
-          <button className="icon-btn" title="Lieder-Datei importieren" onClick={openFile}>&#128229;</button>
-          {songCount>0 && <button className="icon-btn" title="Lieder weitergeben" onClick={()=>setShowShare(true)}>&#128228;</button>}
-          {songCount>0 && <button className="icon-btn" title="Alle Lieder von diesem Gerät entfernen" onClick={()=>setShowClear(true)}>&#128465;</button>}
-        </div>
+        <ActionMenu items={[
+          {label: '📥 Lieder importieren', onClick: openFile},
+          songCount>0 && {label: '📤 Lieder weitergeben', onClick: ()=>setShowShare(true)},
+          songCount>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)}
+        ]} />
       } />
       <input ref={fileRef} type="file" accept="application/json,.json" style={{display:'none'}}
         onChange={e=>{ const f=e.target.files[0]; if(f) onImportFile(f); e.target.value=''; }} />
@@ -1238,7 +1240,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
           <textarea value={f.lyrics} onChange={set('lyrics')} /></div>
         <div className="hint">Die Änderung gilt nur auf diesem Gerät und bekommt einen Zeitstempel. Bringt eine
-          Lieder-Datei später eine ältere Fassung, fragt der Import, welche du behalten willst. Weitergeben kannst du es mit 📤 auf der Startseite oder im Lied.</div>
+          Lieder-Datei später eine ältere Fassung, fragt der Import, welche du behalten willst. Weitergeben kannst du es im Menü ⋯ auf der Startseite oder im Lied.</div>
         {!isNew && onDelete && <button className="btn btn-secondary danger-text" onClick={()=>setConfirmDelete(true)}>Lied löschen</button>}
       </div>
       {confirmDelete && <Confirm title="Lied löschen?"
@@ -1255,7 +1257,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
   );
 }
 
-function SongMenu({items}){
+function ActionMenu({items}){
   const [open,setOpen] = useState(false);
   return (
     <div className="menu-wrap">
@@ -1277,6 +1279,12 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite,
   const [showScores,setShowScores] = useState(false);
   const [editing,setEditing] = useState(false);
   const [practice,setPractice] = useState(false);
+  const [scoresVisible,setScoresVisible] = useState(()=>loadJSON(LS_SHOW_SCORES, true)!==false);
+  function toggleScores(){
+    const v = !scoresVisible;
+    setScoresVisible(v);
+    try{ localStorage.setItem(LS_SHOW_SCORES, JSON.stringify(v)); }catch(e){}
+  }
   const hasVoices = !!(song.voices && song.voices.length);
   const hasScores = !!(song.scores && song.scores.length);
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
@@ -1289,9 +1297,10 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite,
       <Header title={song.title} onBack={onBack}
         right={<React.Fragment>
           <FontSizeButtons fontIndex={fontIndex} onChange={onFontChange} />
-          <SongMenu items={[
+          <ActionMenu items={[
             {label: isFavorite ? '★ Aus Favoriten entfernen' : '☆ Zu Favoriten', onClick: onToggleFavorite},
             {label: '+ Zu Liste hinzufügen', onClick: ()=>setShowChooser(true)},
+            hasScores && {label: scoresVisible ? '♪ Noten ausblenden' : '♪ Noten einblenden', onClick: toggleScores},
             hasVoices && {label: practice ? '♫ Stimmen üben schliessen' : '♫ Stimmen üben', onClick: ()=>setPractice(!practice)},
             {label: '✎ Bearbeiten', onClick: ()=>setEditing(true)},
             {label: '📤 Weitergeben', onClick: ()=>onShare({name: song.title, songs: [song], lists: []})}
@@ -1306,7 +1315,9 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite,
           {[isFavorite && '★ Favorit', inLists.length>0 && 'In: ' + inLists.join(', '),
             song.edited && 'auf diesem Gerät bearbeitet'].filter(Boolean).join(' · ')}</div>}
         {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} />}
-        <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
+        {scoresVisible
+          ? <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
+          : hasScores && <div className="song-status no-print">♪ Noten ausgeblendet – im Menü ⋯ wieder einblenden</div>}
         {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
         {song.updated && <div className="text-stamp">Textstand {formatStamp(song.updated)}</div>}
       </div>

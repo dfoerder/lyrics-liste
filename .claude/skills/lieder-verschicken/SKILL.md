@@ -33,7 +33,7 @@ immer die komplette Sammlung, damit neue Geräte alles bekommen und Listen volls
    Neue Lieder für unsere Andachten (Stand 26.09.2026) 🎵
    Neu: Oceans (Hillsong United), Großer Gott, wir loben dich
    Geändert: Unter deinem Dach
-   So geht's: Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts 📥 antippen – die Datei steht meist ganz oben unter „Zuletzt verwendet“.
+   So geht's: Datei antippen → „In Dateien sichern“, dann in der Lyrics-Liste oben rechts ⋯ → „Lieder importieren“ – die Datei steht meist ganz oben unter „Zuletzt verwendet“.
    App: https://dfoerder.github.io/lyrics-liste/
    ```
    - **Erster Versand:** Lass „Neu:“ weg und erkläre kurz, dass man die App über
@@ -60,10 +60,10 @@ immer die komplette Sammlung, damit neue Geräte alles bekommen und Listen volls
 ## Gelöschte Lieder
 
 Ein Import führt zusammen: Lieder, die auf dem Mac gelöscht wurden, bleiben auf den Geräten,
-bis man dort 🗑 (alles entfernen) antippt und danach importiert. Meldet der Export
+bis man dort im Menü ⋯ „🗑 Alle Lieder entfernen“ wählt und danach importiert. Meldet der Export
 „entfernt: …“, schreib das in den Begleittext, zum Beispiel: „Weil Lieder entfernt wurden:
-vor dem Import oben rechts 🗑 antippen (eigene Listen und Favoriten bleiben).“ Achtung:
-🗑 löscht auch Lieder, die jemand in der App selbst angelegt hat. Erwähne das kurz.
+vor dem Import oben rechts ⋯ → „Alle Lieder entfernen“ (eigene Listen und Favoriten bleiben).“ Achtung:
+das löscht auch Lieder, die jemand in der App selbst angelegt hat. Erwähne das kurz.
 
 ## Warum Claude nicht selbst sendet
 

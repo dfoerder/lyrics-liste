@@ -24,7 +24,7 @@ Entscheid des Besitzers (13.10.2026, Familiengebrauch nach Art. 19 URG):
   welche bleibt (`analyzeImport`, `mergeCollection(…, keepDeviceIds)`). `lieder.py` setzt
   `updated` beim Aufnehmen und bei geändertem Text/Angaben; `uebernehmen` übergeht bei
   `--alle` Lieder, deren Mac-Fassung neuer ist. Der Export-Vergleich ignoriert `updated`. Gelöschtes verschwindet deshalb
-  nicht durch einen Import, nur über 🗑 (alles entfernen) oder „Lied löschen“.
+  nicht durch einen Import, nur über ⋯ → „Alle Lieder entfernen“ oder „Lied löschen“.
 
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
@@ -100,6 +100,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Startseite ganz oben, im Lied Knopf „☆ Zu Favoriten“ / „★ Favorit“. In `ListView` wie eine
   eigene Liste (`FAV_ID`, `own` + `fixed`: verschieben/entfernen ja, umbenennen/löschen nein).
   Bleibt bei Import und Mülleimer erhalten.
+- `localStorage` `lyrics-noten-zeigen` — Noten in der Liedansicht ein-/ausgeblendet (Menü ⋯,
+  gilt für alle Lieder auf dem Gerät; Druck zeigt Noten immer).
 - `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
@@ -111,7 +113,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `HomeView` — Suchfeld (Volltextsuche nur auf dem Gerät: `buildSearchIndex`/`searchSongs`,
   fehlertolerant, ohne Netz und ohne KI-Dienst – Texte dürfen das Gerät nicht verlassen; Treffer
   mit Fundstelle, Suchbegriff bleibt in `App` erhalten), „Favoriten", „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
-  Import-Button, alles entfernen, Stand-Datum
+  Menü ⋯ (importieren, weitergeben, alles entfernen), Stand-Datum
 - `ListView` — Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
   eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
   Entfernen/Umbenennen/Löschen
@@ -128,10 +130,12 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `SongEditor` — „✎ Bearbeiten“ im Lied und „+ Neues Lied“ (Alle Lieder, leere Startseite;
   `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text; speichert über `saveSong` in
   IndexedDB, Verwerfen mit Rückfrage, „Lied löschen“ (`deleteSong`)
-- `ShareChooser` / `shareSongs` — 📤 auf der Startseite (Alle Lieder, Favoriten, eine Liste)
+- `ShareChooser` / `shareSongs` — ⋯ → „Lieder weitergeben“ auf der Startseite (Alle Lieder, Favoriten, eine Liste)
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
-- `SongMenu` — „⋯“ im Kopf der Liedansicht: Favoriten, Zu Liste hinzufügen, Stimmen üben
+- `ActionMenu` — Menü „⋯“ oben rechts. Startseite: Lieder importieren, weitergeben, alle
+  entfernen. Liedansicht: Favoriten, Zu Liste hinzufügen, Noten ein-/ausblenden,
+  Stimmen üben
   (blendet `VoicePlayer` ein, nur bei `voices`), Bearbeiten, Weitergeben. Darunter nur noch
   „▶ Song spielen“ und eine Statuszeile (★ Favorit · In: … · bearbeitet)
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;

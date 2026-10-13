@@ -2,7 +2,7 @@
 
 Die App enthält keine Lieder. Die Lieder-Datei entsteht auf dem Mac mit Claude
 und wird dann an die Familie geschickt und in der App importiert
-(📥 oben rechts). Ein Import führt zusammen (neue Lieder kommen dazu,
+(oben rechts ⋯ → „Lieder importieren“). Ein Import führt zusammen (neue Lieder kommen dazu,
 gleiche ids werden ersetzt). Die Datei soll trotzdem immer die komplette Sammlung enthalten.
 
 ## Einrichtung (einmalig)

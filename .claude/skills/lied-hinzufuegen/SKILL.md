@@ -138,7 +138,7 @@ gilt es als eingelesen.
 
 ## Lieder aus der App übernehmen
 
-Familienmitglieder können in der App Lieder neu anlegen oder bearbeiten und mit 📤 als Datei
+Familienmitglieder können in der App Lieder neu anlegen oder bearbeiten und über das Menü ⋯ (📤) als Datei
 weitergeben, meist in die WhatsApp-Gruppe. Der Nutzer sichert die Datei auf dem Mac, oft in
 `~/Downloads` (`lieder-…-JJJJ-MM-TT.json`). Sagt er nicht, wo, such die neueste:
 `ls -t ~/Downloads/lieder-*.json | head -3`.
