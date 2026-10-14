@@ -149,6 +149,17 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
 
+## Bug-Melder (Testen, wie in der Bibel-App)
+
+- **Einschalten:** unten auf der Startseite fünfmal auf die Versionszeile tippen (`VersionTap`),
+  dieselben fünf Tipps schalten ihn aus; alternativ `?bugs=1` / `?bugs=0` an der URL
+  (`localStorage` `lyrics-bugmode`). Dann schwebt unten rechts ein 🐞-Knopf (`BugReporter`).
+- **Erfasst:** Text, Schwere, Ansicht (`window.__bugCtx`: phase, Liste, Liedtitel – nie
+  Liedtext), App-Version, Gerät, letzte JS-Fehler (`window.__bugLog`, früher Script im `<head>`).
+- **Versand per Mail:** „Per Mail senden“ öffnet `mailto:` mit Betreff und Text. Die
+  Empfängeradresse steht bewusst **nicht** im Code (App ist öffentlich), sondern wird im Melder
+  pro Gerät eingetragen (`lyrics-bug-mail`). Bugs liegen in `lyrics-bugs`, „gemailt“ markiert.
+
 ## Copyright / CCLI
 
 Songtexte christlicher Lieder sind urheberrechtlich geschützt. Die App liefert bewusst
