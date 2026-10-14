@@ -138,7 +138,12 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
 - `ActionMenu` — Menü „⋯“ oben rechts. Startseite: Lieder importieren, weitergeben, alle
-  entfernen, Darstellung. Liedansicht: Favoriten, Zu Liste hinzufügen, Noten ein-/ausblenden,
+  entfernen, Darstellung. Listenansicht: Neues Lied (Alle Lieder), Lieder hinzufügen (eigene
+  Listen, Favoriten), Drucken / Anzeigen, Liste weitergeben (alle Listen), Liste umbenennen
+  (eigene), Liste löschen (alle außer „Alle Lieder“ und Favoriten; `deleteList(withSongs)`:
+  nur die Liste oder auch ihre Lieder, die dann aus allen Listen verschwinden; eine
+  mitgeschickte Liste kommt mit dem nächsten Import zurück). Ohne
+  Einträge wird kein Menü gezeigt. Liedansicht: Favoriten, Zu Liste hinzufügen, Noten ein-/ausblenden,
   Stimmen üben
   (blendet `VoicePlayer` ein, nur bei `voices`), Bearbeiten, Weitergeben. Darunter nur noch
   „▶ Song spielen“ und eine Statuszeile (★ Favorit · In: … · bearbeitet)
@@ -154,6 +159,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - **Einschalten:** unten auf der Startseite fünfmal auf die Versionszeile tippen (`VersionTap`),
   dieselben fünf Tipps schalten ihn aus; alternativ `?bugs=1` / `?bugs=0` an der URL
   (`localStorage` `lyrics-bugmode`). Dann schwebt unten rechts ein 🐞-Knopf (`BugReporter`).
+- **Art:** 🐞 Fehler (mit Schwere) oder 💡 Neues Feature (`kind`).
 - **Erfasst:** Text, Schwere, Ansicht (`window.__bugCtx`: phase, Liste, Liedtitel – nie
   Liedtext), App-Version, Gerät, letzte JS-Fehler (`window.__bugLog`, früher Script im `<head>`).
 - **Versand per Mail:** „Per Mail senden“ öffnet `mailto:` mit Betreff und Text. Die

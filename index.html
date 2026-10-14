@@ -287,7 +287,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-14-2';
+const APP_VERSION = '2026-10-14-4';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -864,7 +864,7 @@ function listSongs(list, songs){
   return list.own ? present : sortSongs(present);
 }
 
-function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong}){
+function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong, onShare}){
   const [showPicker,setShowPicker] = useState(false);
   const [showRename,setShowRename] = useState(false);
   const [showDelete,setShowDelete] = useState(false);
@@ -884,24 +884,25 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete,
 
   return (
     <React.Fragment>
-      <Header title={list.name} onBack={onBack} right={list.own && !list.fixed &&
-        <div style={{display:'flex',gap:'.2rem'}}>
-          <button className="icon-btn" title="Umbenennen" onClick={()=>setShowRename(true)}>&#9998;</button>
-          <button className="icon-btn" title="Liste löschen" onClick={()=>setShowDelete(true)}>&#128465;</button>
-        </div>} />
+      <Header title={list.name} onBack={onBack} right={
+        <ActionMenu items={[
+          list.own && {label: '+ Lieder hinzufügen', onClick: ()=>setShowPicker(true)},
+          list.id===ALL_ID && {label: '+ Neues Lied', onClick: onNewSong},
+          orderedSongs.length>0 && {label: '🖨 Drucken / Anzeigen', onClick: onPrint},
+          orderedSongs.length>0 && {label: '📤 Liste weitergeben', onClick: ()=>onShare({name: list.name, songs: orderedSongs,
+            lists: list.id===ALL_ID || list.id===FAV_ID ? [] : [{id: list.id, name: list.name, songIds: orderedSongs.map(s=>s.id)}]})},
+          list.own && !list.fixed && {label: '✎ Liste umbenennen', onClick: ()=>setShowRename(true)},
+          !list.fixed && list.id!==ALL_ID && {label: '🗑 Liste löschen', onClick: ()=>setShowDelete(true)}
+        ]} />} />
       <div className="main">
-        <div className="toolbar">
-          {list.own && <button className="btn btn-primary" onClick={()=>setShowPicker(true)}>+ Lieder hinzufügen</button>}
-          {list.id===ALL_ID && <button className="btn btn-primary" onClick={onNewSong}>+ Neues Lied</button>}
-          {orderedSongs.length>0 && <button className="btn btn-secondary" onClick={onPrint}>Drucken / Anzeigen</button>}
-        </div>
         {missing>0 && <div className="hint">
           {missing===1
             ? '1 Lied dieser Liste ist gerade nicht in der Sammlung. Kommt es mit einer neuen Lieder-Datei zurück, erscheint es wieder.'
             : `${missing} Lieder dieser Liste sind gerade nicht in der Sammlung. Kommen sie mit einer neuen Lieder-Datei zurück, erscheinen sie wieder.`}</div>}
         {orderedSongs.length===0 && <div className="empty">
-          {list.id===FAV_ID ? 'Noch keine Favoriten. Im Lied auf „☆ Zu Favoriten“ tippen.'
-            : list.own ? 'Noch keine Lieder in dieser Liste.' : 'Diese Liste enthält keine Lieder.'}</div>}
+          {list.id===FAV_ID ? 'Noch keine Favoriten. Im Lied oben rechts ⋯ → „☆ Zu Favoriten“.'
+            : list.own ? 'Noch keine Lieder in dieser Liste.' : 'Diese Liste enthält keine Lieder.'}
+          {list.own && <div><button className="btn btn-primary" onClick={()=>setShowPicker(true)}>+ Lieder hinzufügen</button></div>}</div>}
         <ul className="song-list">
           {orderedSongs.map((s,i)=>(
             <li className="song-item" key={s.id} onClick={()=>onOpenSong(s.id)}>
@@ -928,11 +929,19 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete,
       {showRename && <PromptDialog title="Liste umbenennen" label="Name der Liste" initialValue={list.name}
         onSubmit={name=>{ setShowRename(false); onUpdate({...list, name}); }}
         onCancel={()=>setShowRename(false)} />}
-      {showDelete && <Confirm title="Liste löschen?"
-        message={`„${list.name}" wird gelöscht. Die Lieder selbst bleiben in der Sammlung.`}
-        confirmLabel="Löschen" danger
-        onConfirm={()=>{ setShowDelete(false); onDelete(); }}
-        onCancel={()=>setShowDelete(false)} />}
+      {showDelete && <div className="overlay" onClick={()=>setShowDelete(false)}>
+        <div className="dialog" onClick={e=>e.stopPropagation()}>
+          <h3>Liste löschen?</h3>
+          <p>„{list.name}“ wird von diesem Gerät gelöscht. Sollen die {lieder(orderedSongs.length)} darin
+            in der Sammlung bleiben oder mitgelöscht werden? Mitgelöschte Lieder verschwinden auch aus
+            allen anderen Listen.{!list.own && ' Eine mitgeschickte Liste kommt mit einer neuen Lieder-Datei wieder.'}</p>
+          <div className="dialog-actions" style={{flexWrap:'wrap'}}>
+            <button className="btn btn-secondary" onClick={()=>setShowDelete(false)}>Abbrechen</button>
+            <button className="btn btn-secondary" onClick={()=>{ setShowDelete(false); onDelete(false); }}>Nur Liste löschen</button>
+            {orderedSongs.length>0 && <button className="btn btn-danger" onClick={()=>{ setShowDelete(false); onDelete(true); }}>Liste und {lieder(orderedSongs.length)} löschen</button>}
+          </div>
+        </div>
+      </div>}
     </React.Fragment>
   );
 }
@@ -1346,6 +1355,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
 
 function ActionMenu({items}){
   const [open,setOpen] = useState(false);
+  if(!items.some(Boolean)) return null;
   return (
     <div className="menu-wrap">
       <button className="icon-btn" title="Aktionen" aria-label="Aktionen" onClick={()=>setOpen(!open)}>&#8943;</button>
@@ -1447,6 +1457,7 @@ function PrintView({list, songs, onBack, fontIndex, onFontChange}){
 const LS_BUGMODE = 'lyrics-bugmode';
 const LS_BUGS = 'lyrics-bugs';
 const LS_BUG_MAIL = 'lyrics-bug-mail';
+const BUG_KINDS = [{id:'bug', label:'🐞 Fehler'}, {id:'feature', label:'💡 Neues Feature'}];
 const BUG_SEVS = [{id:'blocker', label:'🔴 Blockiert'}, {id:'major', label:'🟠 Stört'}, {id:'minor', label:'🟡 Kosmetik'}];
 
 function bugModeOn(){ try{ return localStorage.getItem(LS_BUGMODE)==='1'; }catch(e){ return false; } }
@@ -1463,9 +1474,9 @@ function bugCtxLine(c){
 function bugMailBody(bugs){
   return bugs.map((b,i)=>{
     const c = b.ctx || {};
-    const sev = (BUG_SEVS.find(s=>s.id===b.sev) || BUG_SEVS[1]).label.replace(/^\S+\s/,'');
+    const tag = b.kind==='feature' ? 'Neues Feature' : (BUG_SEVS.find(s=>s.id===b.sev) || BUG_SEVS[1]).label.replace(/^\S+\s/,'');
     return [
-      (bugs.length>1 ? `${i+1}. ` : '') + `[${sev}] ${b.text}`,
+      (bugs.length>1 ? `${i+1}. ` : '') + `[${tag}] ${b.text}`,
       `Gemeldet: ${new Date(b.ts).toLocaleString('de-CH')}`,
       `Ansicht: ${bugCtxLine(c)}`,
       `Gerät: ${c.viewport || '?'}${c.standalone ? ', Homescreen-App' : ', Browser'} – ${c.ua || ''}`,
@@ -1502,6 +1513,7 @@ function BugReporter(){
   const [list,setList] = useState(()=>loadJSON(LS_BUGS, []));
   const [text,setText] = useState('');
   const [sev,setSev] = useState('major');
+  const [kind,setKind] = useState('bug');
   const [ctx,setCtx] = useState(null);
   const [mail,setMail] = useState(()=>{ try{ return localStorage.getItem(LS_BUG_MAIL)||''; }catch(e){ return ''; } });
   const [msg,setMsg] = useState('');
@@ -1512,7 +1524,8 @@ function BugReporter(){
   const saveMail = v => { setMail(v); try{ v ? localStorage.setItem(LS_BUG_MAIL, v) : localStorage.removeItem(LS_BUG_MAIL); }catch(e){} };
 
   function openMail(bugs, l){
-    const subject = `Lyrics-Liste: ${bugs.length===1 ? 'Bug – ' + bugs[0].text.slice(0,50) : bugs.length + ' Bugs'}`;
+    const one = bugs.length===1 && (bugs[0].kind==='feature' ? 'Feature-Wunsch – ' : 'Bug – ') + bugs[0].text.slice(0,50);
+    const subject = `Lyrics-Liste: ${one || bugs.length + ' Meldungen'}`;
     const href = `mailto:${encodeURIComponent(mail.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bugMailBody(bugs))}`;
     const ids = new Set(bugs.map(b=>b.id));
     persist(l.map(b=>ids.has(b.id) ? {...b, mailed: new Date().toISOString()} : b));
@@ -1523,7 +1536,7 @@ function BugReporter(){
     const body = text.trim();
     if(!body){ setMsg('Bitte kurz beschreiben, was passiert ist.'); return; }
     const bug = {id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,6),
-      ts: new Date().toISOString(), sev, text: body, ctx: ctx || bugSnapshot()};
+      ts: new Date().toISOString(), kind, sev: kind==='feature' ? '' : sev, text: body, ctx: ctx || bugSnapshot()};
     const next = [bug, ...list];
     persist(next);
     setText('');
@@ -1541,13 +1554,16 @@ function BugReporter(){
   return (
     <div className="overlay no-print" onClick={close}>
       <div className="dialog bug-sheet" onClick={e=>e.stopPropagation()}>
-        <h3>Bug melden</h3>
+        <h3>{kind==='feature' ? 'Neues Feature wünschen' : 'Bug melden'}</h3>
         <div className="ctx">Ansicht: {bugCtxLine(ctx)}</div>
         <div className="bug-sevs">
-          {BUG_SEVS.map(s=><button key={s.id} className={'btn btn-secondary' + (sev===s.id ? ' on' : '')} onClick={()=>setSev(s.id)}>{s.label}</button>)}
+          {BUG_KINDS.map(k=><button key={k.id} className={'btn btn-secondary' + (kind===k.id ? ' on' : '')} onClick={()=>setKind(k.id)}>{k.label}</button>)}
         </div>
+        {kind==='bug' && <div className="bug-sevs">
+          {BUG_SEVS.map(s=><button key={s.id} className={'btn btn-secondary' + (sev===s.id ? ' on' : '')} onClick={()=>setSev(s.id)}>{s.label}</button>)}
+        </div>}
         <textarea rows={4} value={text} onChange={e=>setText(e.target.value)}
-          placeholder="Was ist passiert? z.B. Nach dem Import fehlt die Liste Weihnachten" />
+          placeholder={kind==='feature' ? 'Was soll die App können? z.B. Lieder nach Jahr sortieren' : 'Was ist passiert? z.B. Nach dem Import fehlt die Liste Weihnachten'} />
         <div className="dialog-actions" style={{marginTop:'.7rem'}}>
           <button className="btn btn-secondary" onClick={()=>save(false)}>Nur speichern</button>
           <button className="btn btn-primary" onClick={()=>save(true)}>Per Mail senden</button>
@@ -1563,7 +1579,7 @@ function BugReporter(){
         {showList && <div style={{marginTop:'.5rem'}}>
           {list.map(b=>(
             <div className="bug-item" key={b.id}>
-              <span>{(BUG_SEVS.find(s=>s.id===b.sev) || BUG_SEVS[1]).label.split(' ')[0]}</span>
+              <span>{b.kind==='feature' ? '💡' : (BUG_SEVS.find(s=>s.id===b.sev) || BUG_SEVS[1]).label.split(' ')[0]}</span>
               <div className="txt">{b.text}
                 <div className="meta">{new Date(b.ts).toLocaleString('de-CH')} · {b.mailed ? '✓ gemailt' : 'nicht gemailt'}</div></div>
               {confirm && confirm.del===b.id
@@ -1723,8 +1739,21 @@ function App(){
     if(id===FAV_ID){ setFavorites(songIds); return; }
     setMyLists(prev=>prev.map(l=>l.id===id ? {id, name, songIds} : l));
   }
-  function deleteMyList(){
-    setMyLists(prev=>prev.filter(l=>l.id!==activeListId));
+  // Liste löschen (eigene oder mitgeschickte); withSongs löscht auch ihre Lieder vom Gerät.
+  async function deleteList(withSongs){
+    const list = activeList;
+    const songIds = withSongs ? list.songIds.filter(id=>collection.songs[id]) : [];
+    const removeIds = new Set(songIds);
+    if(!list.own || removeIds.size){
+      const songs = {...collection.songs};
+      removeIds.forEach(id=>{ delete songs[id]; });
+      const next = {...collection, songs,
+        lists: collection.lists.filter(l=>l.id!==list.id).map(l=>({...l, songIds: l.songIds.filter(id=>!removeIds.has(id))}))};
+      try{ await saveCollection(next); }
+      catch(e){ setSaveError(e.message || 'Die Liste konnte nicht gelöscht werden.'); return; }
+      setCollection(next);
+    }
+    if(list.own) setMyLists(prev=>prev.filter(l=>l.id!==list.id));
     goHome();
   }
 
@@ -1740,7 +1769,7 @@ function App(){
       onPrint={()=>setPhase('print')}
       onNewSong={newSong}
       onUpdate={updateMyList}
-      onDelete={deleteMyList} />;
+      onDelete={deleteList} onShare={share} />;
   }
   else if(phase==='song' && activeSong){
     view = <SongView key={activeSong.id} song={activeSong} myLists={myLists} onSaveSong={saveSong}
