@@ -171,6 +171,9 @@ a.btn{display:inline-block;text-decoration:none}
 .bug-item .txt{flex:1;min-width:0;color:var(--text2)}
 .bug-item .meta{font-size:.72rem;color:var(--muted)}
 .bug-item button{font-size:.75rem;color:var(--muted);padding:.1rem .3rem}
+@media screen{
+  .song-print + .song-print{margin-top:2.8rem;padding-top:1.8rem;border-top:1px solid var(--border2)}
+}
 .edited-note{font-size:.78rem;color:var(--muted);margin:-.6rem 0 1rem}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
@@ -287,7 +290,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-14-4';
+const APP_VERSION = '2026-10-14-5';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -550,12 +553,66 @@ function mergeCollection(current, incoming, keepDeviceIds){
   });
   const lists = (current ? current.lists : []).map(l=>incoming.lists.find(x=>x.id===l.id) || l);
   incoming.lists.forEach(l=>{ if(!lists.some(x=>x.id===l.id)) lists.push(l); });
-  return {created: incoming.created || (current && current.created) || '', lists, songs};
+  // Ein Lied, das mit der Datei (wieder) kommt, ist nicht mehr gelöscht
+  const trash = {...((current && current.trash) || {})};
+  Object.keys(incoming.songs).forEach(id=>{ if(!keep.has(id)) delete trash[id]; });
+  return {created: incoming.created || (current && current.created) || '', lists, songs, trash};
 }
 
 function slugify(s){
   return (s||'').toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+}
+
+// ---------- Papierkorb: Gelöschte Lieder bleiben in collection.trash, bis sie endgültig
+// entfernt werden. trash = { [id]: {song, deletedAt, lists: [{id, name, pos}]} } – die
+// Listen-Zugehörigkeit (mitgeschickte Listen) wird gemerkt, damit Wiederherstellen das Lied
+// wieder an seine Stelle setzt (auch eine mitgelöschte Liste entsteht neu).
+function trashSongs(coll, ids){
+  const remove = new Set(ids.filter(id=>coll.songs[id]));
+  if(!remove.size) return coll;
+  const songs = {...coll.songs}, trash = {...(coll.trash||{})}, now = new Date().toISOString();
+  remove.forEach(id=>{
+    trash[id] = {song: songs[id], deletedAt: now,
+      lists: coll.lists.filter(l=>l.songIds.includes(id)).map(l=>({id: l.id, name: l.name, pos: l.songIds.indexOf(id)}))};
+    delete songs[id];
+  });
+  return {...coll, songs, trash, lists: coll.lists.map(l=>({...l, songIds: l.songIds.filter(id=>!remove.has(id))}))};
+}
+function restoreSongs(coll, ids){
+  const trash = {...(coll.trash||{})}, songs = {...coll.songs};
+  const lists = coll.lists.map(l=>({...l, songIds: [...l.songIds]}));
+  const back = ids.filter(id=>trash[id]);
+  back.flatMap(id=>trash[id].lists.map(m=>({...m, songId: id}))).sort((a,b)=>a.pos-b.pos).forEach(m=>{
+    let l = lists.find(x=>x.id===m.id);
+    if(!l){ l = {id: m.id, name: m.name, songIds: []}; lists.push(l); }
+    if(!l.songIds.includes(m.songId)) l.songIds.splice(Math.min(m.pos, l.songIds.length), 0, m.songId);
+  });
+  back.forEach(id=>{ songs[id] = trash[id].song; delete trash[id]; });
+  return {...coll, songs, lists, trash};
+}
+
+function RestoreDialog({trash, onRestore, onClose}){
+  const entries = Object.values(trash).sort((a,b)=>b.deletedAt.localeCompare(a.deletedAt));
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Gelöschte Lieder</h3>
+        <p>Antippen stellt ein Lied wieder her – auch in den Listen, in denen es war.</p>
+        <div className="picker-list">
+          {entries.map(e=>(
+            <div className="picker-item" key={e.song.id} onClick={()=>onRestore([e.song.id])}>
+              {e.song.title}<div className="artist">gelöscht {formatStamp(e.deletedAt)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="dialog-actions" style={{marginTop:'1rem'}}>
+          <button className="btn btn-secondary" onClick={onClose}>Schliessen</button>
+          <button className="btn btn-primary" onClick={()=>onRestore(entries.map(e=>e.song.id))}>Alle wiederherstellen</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function newSongId(title){
@@ -753,10 +810,14 @@ function ListCard({list, count, onOpen}){
   );
 }
 
-function HomeView({collection, myLists, favorites, theme, onThemeChange, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
+function HomeView({collection, myLists, favorites, theme, onThemeChange, onRestore, onPurge, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
   const [showClear,setShowClear] = useState(false);
   const [showNewList,setShowNewList] = useState(false);
   const [showShare,setShowShare] = useState(false);
+  const [showRestore,setShowRestore] = useState(false);
+  const [showPurge,setShowPurge] = useState(false);
+  const trash = (collection && collection.trash) || {};
+  const trashCount = Object.keys(trash).length;
   const fileRef = useRef(null);
   const songs = collection ? collection.songs : {};
   const songCount = collection ? Object.keys(collection.songs).length : 0;
@@ -771,6 +832,8 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, query, 
           {label: '📥 Lieder importieren', onClick: openFile},
           songCount>0 && {label: '📤 Lieder weitergeben', onClick: ()=>setShowShare(true)},
           songCount>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)},
+          trashCount>0 && {label: `♻ Gelöschte wiederherstellen (${trashCount})`, onClick: ()=>setShowRestore(true)},
+          trashCount>0 && {label: `✕ Gelöschte endgültig entfernen (${trashCount})`, onClick: ()=>setShowPurge(true)},
           {label: `🌓 Darstellung: ${THEMES[theme]}`, onClick: ()=>{
             const order = Object.keys(THEMES);
             onThemeChange(order[(order.indexOf(theme)+1) % order.length]);
@@ -842,11 +905,19 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, query, 
           </React.Fragment>}
       </div>
       {showClear && <Confirm title="Alle Lieder entfernen?"
-        message={'Alle Lieder und die mitgeschickten Listen werden von diesem Gerät gelöscht. Du kannst die Datei später erneut importieren.'
+        message={'Alle Lieder und die mitgeschickten Listen kommen zu den gelöschten Liedern. Über ⋯ → „Gelöschte wiederherstellen“ holst du sie zurück, oder du importierst die Datei erneut.'
           + (myLists.length ? ' Deine eigenen Listen bleiben erhalten und füllen sich beim nächsten Import wieder.' : '')}
         confirmLabel="Entfernen" danger
         onConfirm={()=>{ setShowClear(false); onClear(); }}
         onCancel={()=>setShowClear(false)} />}
+      {showRestore && <RestoreDialog trash={trash}
+        onRestore={ids=>{ onRestore(ids); if(ids.length>=trashCount) setShowRestore(false); }}
+        onClose={()=>setShowRestore(false)} />}
+      {showPurge && <Confirm title="Gelöschte endgültig entfernen?"
+        message={`${lieder(trashCount)} ${trashCount===1 ? 'wird' : 'werden'} ganz von diesem Gerät entfernt und ${trashCount===1 ? 'kann' : 'können'} nicht mehr wiederhergestellt werden – nur noch über eine Lieder-Datei.`}
+        confirmLabel="Endgültig entfernen" danger
+        onConfirm={()=>{ setShowPurge(false); onPurge(); }}
+        onCancel={()=>setShowPurge(false)} />}
       {showShare && <ShareChooser collection={collection} myLists={myLists} favorites={favorites}
         onShare={sel=>{ setShowShare(false); onShare(sel); }}
         onClose={()=>setShowShare(false)} />}
@@ -934,7 +1005,8 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete,
           <h3>Liste löschen?</h3>
           <p>„{list.name}“ wird von diesem Gerät gelöscht. Sollen die {lieder(orderedSongs.length)} darin
             in der Sammlung bleiben oder mitgelöscht werden? Mitgelöschte Lieder verschwinden auch aus
-            allen anderen Listen.{!list.own && ' Eine mitgeschickte Liste kommt mit einer neuen Lieder-Datei wieder.'}</p>
+            allen anderen Listen; über ⋯ → „Gelöschte wiederherstellen“ auf der Startseite kommen sie
+            zurück{!list.own && ' (samt Liste)'}.{!list.own && ' Eine mitgeschickte Liste kommt mit einer neuen Lieder-Datei wieder.'}</p>
           <div className="dialog-actions" style={{flexWrap:'wrap'}}>
             <button className="btn btn-secondary" onClick={()=>setShowDelete(false)}>Abbrechen</button>
             <button className="btn btn-secondary" onClick={()=>{ setShowDelete(false); onDelete(false); }}>Nur Liste löschen</button>
@@ -1340,7 +1412,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         {!isNew && onDelete && <button className="btn btn-secondary danger-text" onClick={()=>setConfirmDelete(true)}>Lied löschen</button>}
       </div>
       {confirmDelete && <Confirm title="Lied löschen?"
-        message={`„${song.title}" wird von diesem Gerät gelöscht. Eigene Listen merken es sich – kommt es mit einer Lieder-Datei zurück, erscheint es wieder.`}
+        message={`„${song.title}“ kommt zu den gelöschten Liedern. Auf der Startseite über ⋯ → „Gelöschte wiederherstellen“ holst du es zurück.`}
         confirmLabel="Löschen" danger
         onConfirm={onDelete}
         onCancel={()=>setConfirmDelete(false)} />}
@@ -1683,12 +1755,14 @@ function App(){
     goHome();
   }
   async function clearAll(){
-    // Eigene Listen bleiben bewusst erhalten (nur Verweise, füllen sich beim nächsten Import)
-    try{ await saveCollection(null); }catch(e){}
-    setCollection(null);
+    // Lieder kommen in den Papierkorb (wiederherstellbar); eigene Listen bleiben bewusst erhalten
+    const trashed = trashSongs(collection, Object.keys(collection.songs));
+    if(!await commit({...trashed, lists: []}, 'Die Lieder konnten nicht entfernt werden.')) return;
     LS_LEGACY.forEach(k=>localStorage.removeItem(k));
     goHome();
   }
+  async function restore(ids){ await commit(restoreSongs(collection, ids), 'Wiederherstellen hat nicht geklappt.'); }
+  async function purgeTrash(){ await commit({...collection, trash: {}}, 'Entfernen hat nicht geklappt.'); }
   function createMyList(name){
     const l = {id: uid(), name, songIds: []};
     setMyLists(prev=>[...prev, l]);
@@ -1714,13 +1788,14 @@ function App(){
     setCollection(next);
     return true;
   }
-  async function deleteSong(id){
-    const songs = {...collection.songs};
-    delete songs[id];
-    const next = {...collection, songs, lists: collection.lists.map(l=>({...l, songIds: l.songIds.filter(x=>x!==id)}))};
+  async function commit(next, errMsg){
     try{ await saveCollection(next); }
-    catch(e){ setSaveError(e.message || 'Das Lied konnte nicht gelöscht werden.'); return; }
+    catch(e){ setSaveError(e.message || errMsg); return false; }
     setCollection(next);
+    return true;
+  }
+  async function deleteSong(id){
+    if(!await commit(trashSongs(collection, [id]), 'Das Lied konnte nicht gelöscht werden.')) return;
     setActiveSongId(null);
     setPhase(activeListId ? 'list' : 'home');
   }
@@ -1743,15 +1818,10 @@ function App(){
   async function deleteList(withSongs){
     const list = activeList;
     const songIds = withSongs ? list.songIds.filter(id=>collection.songs[id]) : [];
-    const removeIds = new Set(songIds);
-    if(!list.own || removeIds.size){
-      const songs = {...collection.songs};
-      removeIds.forEach(id=>{ delete songs[id]; });
-      const next = {...collection, songs,
-        lists: collection.lists.filter(l=>l.id!==list.id).map(l=>({...l, songIds: l.songIds.filter(id=>!removeIds.has(id))}))};
-      try{ await saveCollection(next); }
-      catch(e){ setSaveError(e.message || 'Die Liste konnte nicht gelöscht werden.'); return; }
-      setCollection(next);
+    if(!list.own || songIds.length){
+      const trashed = trashSongs(collection, songIds);
+      const next = {...trashed, lists: trashed.lists.filter(l=>l.id!==list.id)};
+      if(!await commit(next, 'Die Liste konnte nicht gelöscht werden.')) return;
     }
     if(list.own) setMyLists(prev=>prev.filter(l=>l.id!==list.id));
     goHome();
@@ -1790,7 +1860,7 @@ function App(){
   }
   else {
     view = <HomeView collection={collection} myLists={myLists} favorites={favorites}
-      theme={theme} onThemeChange={setTheme}
+      theme={theme} onThemeChange={setTheme} onRestore={restore} onPurge={purgeTrash}
       query={searchQuery} onQueryChange={setSearchQuery}
       onOpenSong={id=>{ setActiveListId(null); setActiveSongId(id); setPhase('song'); }}
       onShare={share} onNewSong={newSong}

@@ -25,6 +25,11 @@ Entscheid des Besitzers (13.10.2026, Familiengebrauch nach Art. 19 URG):
   `updated` beim Aufnehmen und bei geändertem Text/Angaben; `uebernehmen` übergeht bei
   `--alle` Lieder, deren Mac-Fassung neuer ist. Der Export-Vergleich ignoriert `updated`. Gelöschtes verschwindet deshalb
   nicht durch einen Import, nur über ⋯ → „Alle Lieder entfernen“ oder „Lied löschen“.
+- **Papierkorb:** Löschen (Lied, Liste mit Liedern, Alle Lieder entfernen) verschiebt Lieder nach
+  `collection.trash` (`trashSongs`, merkt Listen-Zugehörigkeit). Startseite ⋯: „Gelöschte
+  wiederherstellen“ (`RestoreDialog`/`restoreSongs`, setzt Lieder an ihre Stelle zurück, legt
+  mitgelöschte mitgeschickte Listen neu an) und „Gelöschte endgültig entfernen“. Kommt ein
+  gelöschtes Lied mit einer Lieder-Datei, verlässt es den Papierkorb.
 
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
@@ -86,7 +91,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
 **Daten:**
 - **IndexedDB** `lyrics-liste` / Store `daten` / Schlüssel `sammlung` — die zuletzt
-  importierte Sammlung: `{created, importedAt, lists:[...], songs:{ [id]: {...} }}`.
+  importierte Sammlung: `{created, importedAt, lists:[...], songs:{ [id]: {...} }, trash?:{ [id]: {song, deletedAt, lists} }}`.
   IndexedDB statt localStorage wegen der Notenbilder (localStorage auf iOS ~5 MB).
   Laden/Speichern asynchron (`loadCollection`/`saveCollection`); beim Import wird
   erst gespeichert, dann angezeigt. Ältere Stände unter `localStorage`
