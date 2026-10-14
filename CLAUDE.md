@@ -102,6 +102,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Bleibt bei Import und Mülleimer erhalten.
 - `localStorage` `lyrics-noten-zeigen` — Noten in der Liedansicht ein-/ausgeblendet (Menü ⋯,
   gilt für alle Lieder auf dem Gerät; Druck zeigt Noten immer).
+- `localStorage` `lyrics-darstellung` — `auto` (folgt Hell/Dunkel des iPhones,
+  `prefers-color-scheme`), `hell` oder `dunkel` (Menü ⋯ auf der Startseite). Ein kleines Skript
+  im `<head>` setzt `data-theme` vor dem ersten Zeichnen. Farben nur über die CSS-Variablen in
+  `:root` (dunkle Werte in `@media screen`), der Druck bleibt immer hell; Noten bleiben weiß.
 - `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
@@ -134,7 +138,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
 - `ActionMenu` — Menü „⋯“ oben rechts. Startseite: Lieder importieren, weitergeben, alle
-  entfernen. Liedansicht: Favoriten, Zu Liste hinzufügen, Noten ein-/ausblenden,
+  entfernen, Darstellung. Liedansicht: Favoriten, Zu Liste hinzufügen, Noten ein-/ausblenden,
   Stimmen üben
   (blendet `VoicePlayer` ein, nur bei `voices`), Bearbeiten, Weitergeben. Darunter nur noch
   „▶ Song spielen“ und eine Statuszeile (★ Favorit · In: … · bearbeitet)

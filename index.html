@@ -8,6 +8,16 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Lyrics-Liste"/>
 <meta name="theme-color" content="#2a4a5a"/>
+<script>
+// Darstellung vor dem ersten Zeichnen setzen (kein heller Blitz am Abend):
+// 'auto' folgt dem iPhone (Hell/Dunkel), 'hell'/'dunkel' fest gewählt im Menü ⋯
+(function(){
+  var m = 'auto';
+  try{ m = JSON.parse(localStorage.getItem('lyrics-darstellung')) || 'auto'; }catch(e){}
+  if(m==='hell') document.documentElement.setAttribute('data-theme','light');
+  if(m==='dunkel') document.documentElement.setAttribute('data-theme','dark');
+})();
+</script>
 <title>Lyrics-Liste</title>
 <link rel="manifest" href="manifest.webmanifest"/>
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png"/>
@@ -24,6 +34,30 @@
   --danger:#b3402a;--danger-bg:rgba(179,64,42,0.08);
   --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --shadow:0 1px 3px rgba(0,0,0,0.08);
+  --on-accent:#fff;
+  color-scheme:light;
+}
+/* Dunkle Darstellung: folgt dem iPhone (prefers-color-scheme) oder fest gewählt (data-theme).
+   Nur am Bildschirm – der Druck bleibt hell. */
+@media screen and (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11181c;--bg-card:#1b252b;--border:#2a363d;--border2:#3a4850;
+    --text:#e6edf0;--text2:#b8c5cb;--muted:#7f9099;
+    --accent:#5fb0c2;--accent-dark:#8fd0de;--accent-bg:rgba(95,176,194,0.14);
+    --danger:#e07a63;--danger-bg:rgba(224,122,99,0.14);
+    --shadow:0 1px 3px rgba(0,0,0,0.4);--on-accent:#0b1a1f;
+    color-scheme:dark;
+  }
+}
+@media screen{
+  :root[data-theme="dark"]{
+    --bg:#11181c;--bg-card:#1b252b;--border:#2a363d;--border2:#3a4850;
+    --text:#e6edf0;--text2:#b8c5cb;--muted:#7f9099;
+    --accent:#5fb0c2;--accent-dark:#8fd0de;--accent-bg:rgba(95,176,194,0.14);
+    --danger:#e07a63;--danger-bg:rgba(224,122,99,0.14);
+    --shadow:0 1px 3px rgba(0,0,0,0.4);--on-accent:#0b1a1f;
+    color-scheme:dark;
+  }
 }
 html,body{height:100%}
 body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
@@ -57,7 +91,7 @@ button:focus{outline:2px solid var(--accent);outline-offset:1px}
 .stand{text-align:center;font-size:.76rem;color:var(--muted);margin-top:1.4rem}
 
 .btn{padding:.55rem 1rem;border-radius:.5rem;font-weight:600;font-size:.9rem}
-.btn-primary{background:var(--accent);color:#fff}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
 .btn-primary:hover{background:var(--accent-dark)}
 .btn-secondary{background:var(--bg);border:1px solid var(--border2);color:var(--text2)}
 .btn-secondary:hover{background:var(--accent-bg)}
@@ -86,7 +120,7 @@ a.btn{display:inline-block;text-decoration:none}
 .editor-row{display:flex;gap:.6rem}
 .editor-row .field{flex:1;min-width:0}
 .editor-row .field.year{flex:0 0 6rem}
-.danger-text{color:#b03a2e;margin-top:.5rem}
+.danger-text{color:var(--danger);margin-top:.5rem}
 .text-stamp{font-size:.72rem;color:var(--muted);margin-top:1.2rem}
 .conflicts{max-height:45vh;overflow-y:auto;margin-bottom:1rem}
 .conflict{border:1px solid var(--border);border-radius:.5rem;padding:.6rem .7rem;margin-bottom:.5rem}
@@ -114,7 +148,7 @@ a.btn{display:inline-block;text-decoration:none}
 .picker-item .artist{font-size:.78rem;color:var(--muted)}
 .picker-empty{padding:.8rem;color:var(--muted);font-size:.9rem}
 .picker-item.choice{display:flex;align-items:center;gap:.6rem}
-.picker-item .check{width:1.3rem;height:1.3rem;border:1.5px solid var(--border2);border-radius:.35rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;color:#fff}
+.picker-item .check{width:1.3rem;height:1.3rem;border:1.5px solid var(--border2);border-radius:.35rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;color:var(--on-accent)}
 .picker-item.on .check{background:var(--accent);border-color:var(--accent)}
 .picker-item.new-list{color:var(--accent-dark);font-weight:600}
 .new-list-row{display:flex;gap:.5rem;padding:.6rem;border-bottom:1px solid var(--border)}
@@ -164,7 +198,7 @@ a.btn{display:inline-block;text-decoration:none}
 .vp-chips{display:flex;gap:.4rem;flex-wrap:wrap}
 .vp-chip{padding:.4rem .65rem;border-radius:999px;border:1px solid var(--border2);background:var(--bg);color:var(--text2);font-size:.85rem;font-weight:600}
 .vp-chip.small{padding:.25rem .7rem;font-size:.8rem}
-.vp-chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.vp-chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .vp-line{display:flex;align-items:center;gap:.6rem;margin-top:.7rem}
 .vp-label{font-size:.8rem;color:var(--muted);min-width:6.5rem}
 .vp-tempo{flex:1;min-width:0;accent-color:var(--accent)}
@@ -202,9 +236,21 @@ const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 const LS_FAVORITES = 'lyrics-favoriten';
 // Noten in der Liedansicht anzeigen (true/false), pro Gerät für alle Lieder gemerkt
 const LS_SHOW_SCORES = 'lyrics-noten-zeigen';
+// Darstellung: 'auto' (wie iPhone), 'hell', 'dunkel' – wird auch im <head> vor dem Zeichnen gelesen
+const LS_THEME = 'lyrics-darstellung';
+const THEMES = {auto: 'Automatisch (wie iPhone)', hell: 'Immer hell', dunkel: 'Immer dunkel'};
+function applyTheme(mode){
+  const el = document.documentElement;
+  if(mode==='hell') el.setAttribute('data-theme','light');
+  else if(mode==='dunkel') el.setAttribute('data-theme','dark');
+  else el.removeAttribute('data-theme');
+  const dark = mode==='dunkel' || (mode!=='hell' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', dark ? '#1b252b' : '#2a4a5a');
+}
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-13-6';
+const APP_VERSION = '2026-10-14';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -670,7 +716,7 @@ function ListCard({list, count, onOpen}){
   );
 }
 
-function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
+function HomeView({collection, myLists, favorites, theme, onThemeChange, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
   const [showClear,setShowClear] = useState(false);
   const [showNewList,setShowNewList] = useState(false);
   const [showShare,setShowShare] = useState(false);
@@ -687,7 +733,11 @@ function HomeView({collection, myLists, favorites, query, onQueryChange, onOpenS
         <ActionMenu items={[
           {label: '📥 Lieder importieren', onClick: openFile},
           songCount>0 && {label: '📤 Lieder weitergeben', onClick: ()=>setShowShare(true)},
-          songCount>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)}
+          songCount>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)},
+          {label: `🌓 Darstellung: ${THEMES[theme]}`, onClick: ()=>{
+            const order = Object.keys(THEMES);
+            onThemeChange(order[(order.indexOf(theme)+1) % order.length]);
+          }}
         ]} />
       } />
       <input ref={fileRef} type="file" accept="application/json,.json" style={{display:'none'}}
@@ -1368,6 +1418,16 @@ function App(){
   const [activeListId,setActiveListId] = useState(null);
   const [activeSongId,setActiveSongId] = useState(null);
   const [searchQuery,setSearchQuery] = useState('');
+  const [theme,setTheme] = useState(()=>{ const m = loadJSON(LS_THEME, 'auto'); return THEMES[m] ? m : 'auto'; });
+  useEffect(()=>{
+    applyTheme(theme);
+    try{ localStorage.setItem(LS_THEME, JSON.stringify(theme)); }catch(e){}
+    if(theme!=='auto' || !window.matchMedia) return;
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    const update = ()=>applyTheme('auto');
+    mq.addEventListener ? mq.addEventListener('change', update) : mq.addListener(update);
+    return ()=>{ mq.removeEventListener ? mq.removeEventListener('change', update) : mq.removeListener(update); };
+  },[theme]);
   const [pendingImport,setPendingImport] = useState(null);
   const [importError,setImportError] = useState('');
   const [saveError,setSaveError] = useState('');
@@ -1514,6 +1574,7 @@ function App(){
   }
   else {
     view = <HomeView collection={collection} myLists={myLists} favorites={favorites}
+      theme={theme} onThemeChange={setTheme}
       query={searchQuery} onQueryChange={setSearchQuery}
       onOpenSong={id=>{ setActiveListId(null); setActiveSongId(id); setPhase('song'); }}
       onShare={share} onNewSong={newSong}
