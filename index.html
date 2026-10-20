@@ -219,7 +219,15 @@ a.btn{display:inline-block;text-decoration:none}
 .dialog p{color:var(--text2);font-size:.92rem;line-height:1.5;margin-bottom:1rem}
 .dialog-actions{display:flex;justify-content:flex-end;gap:.6rem}
 
-.scores{margin-bottom:1rem}
+.scores{margin-bottom:1rem;position:relative}
+.scores-close{position:absolute;top:.4rem;right:.4rem;width:2rem;height:2rem;border-radius:50%;background:rgba(255,255,255,.92);color:#20313a;border:1px solid #cdd5d8;font-size:.95rem;box-shadow:0 1px 4px rgba(0,0,0,.2);z-index:2}
+.note-tools{display:flex;gap:.5rem;margin:0 0 .8rem}
+.note-tools button{font-size:1.25rem;width:2.6rem;height:2.6rem;border-radius:.6rem;border:1px solid var(--border2);background:var(--bg-card);color:var(--accent-dark)}
+.note-tools button.on{background:var(--accent-bg);border-color:var(--accent)}
+.file-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;font-size:.88rem;color:var(--text2)}
+.file-row .btn{font-size:.82rem;padding:.4rem .7rem}
+.file-pick{position:relative;overflow:hidden}
+.file-pick input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .scores img{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--border);border-radius:.4rem;margin-bottom:.6rem;cursor:zoom-in}
 .score-viewer{position:fixed;inset:0;background:#fff;z-index:200;display:flex;flex-direction:column}
 .score-bar{display:flex;align-items:center;gap:.4rem;padding:.6rem 1rem;padding-top:calc(.6rem + env(safe-area-inset-top));border-bottom:1px solid var(--border);background:var(--bg-card)}
@@ -290,7 +298,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-14-5';
+const APP_VERSION = '2026-10-20';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -622,6 +630,208 @@ function newSongId(title){
 
 // Lieder als Import-Datei über das Teilen-Fenster weitergeben (z.B. WhatsApp an die Familie).
 // Ohne Teilen-Funktion (Desktop) wird die Datei heruntergeladen.
+// ---------- Dateien: Noten (PDF/Bilder) und Übungsstimmen (MIDI) hochladen und wieder sichern
+function bytesToDataUri(bytes, mime){
+  let s = '';
+  for(let i=0; i<bytes.length; i+=0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i+0x8000));
+  return `data:${mime};base64,` + btoa(s);
+}
+function dataUriToBytes(uri){
+  const b = atob(uri.split(',')[1]), out = new Uint8Array(b.length);
+  for(let i=0; i<b.length; i++) out[i] = b.charCodeAt(i);
+  return out;
+}
+function readFileBytes(file){ return file.arrayBuffer().then(b=>new Uint8Array(b)); }
+
+// pdf.js wird nur beim Hochladen eines PDFs geladen (braucht dann Internet)
+let pdfjsPromise = null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(!pdfjsPromise) pdfjsPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = ()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; resolve(window.pdfjsLib); };
+    s.onerror = ()=>{ pdfjsPromise = null; reject(new Error('PDF-Leser konnte nicht geladen werden – ist das Gerät online?')); };
+    document.head.appendChild(s);
+  });
+  return pdfjsPromise;
+}
+// Leeren weißen Rand abschneiden (wie tools/pdf_seiten.swift), bis auf 24 px
+function trimCanvas(c){
+  const ctx = c.getContext('2d'), {width: w, height: h} = c, d = ctx.getImageData(0,0,w,h).data;
+  let top = h, left = w, right = -1, bottom = -1;
+  for(let y=0; y<h; y+=2) for(let x=0; x<w; x+=2){
+    const i = (y*w + x)*4;
+    if(d[i] < 200 || d[i+1] < 200 || d[i+2] < 200){ if(y<top) top=y; if(y>bottom) bottom=y; if(x<left) left=x; if(x>right) right=x; }
+  }
+  if(right < 0) return c;
+  const pad = 24, x0 = Math.max(0,left-pad), y0 = Math.max(0,top-pad), x1 = Math.min(w,right+pad), y1 = Math.min(h,bottom+pad);
+  const out = document.createElement('canvas'); out.width = x1-x0; out.height = y1-y0;
+  out.getContext('2d').drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+async function pdfToScores(file){
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({data: await readFileBytes(file)}).promise;
+  const pages = [];
+  for(let n=1; n<=pdf.numPages; n++){
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({scale: 1});
+    const vp = page.getViewport({scale: Math.max(2, 1100/base.width)});
+    const c = document.createElement('canvas'); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+    // intent 'print': zeichnet ohne requestAnimationFrame – klappt auch, wenn die App gerade im Hintergrund ist
+    await page.render({canvasContext: ctx, viewport: vp, intent: 'print'}).promise;
+    pages.push(trimCanvas(c).toDataURL('image/jpeg', 0.85));
+  }
+  return pages;
+}
+async function filesToScores(files){
+  const out = [];
+  for(const f of files){
+    if(/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)) out.push(...await pdfToScores(f));
+    else if(/^image\/(png|jpeg|gif|webp)$/.test(f.type)) out.push(bytesToDataUri(await readFileBytes(f), f.type));
+    else throw new Error(`${f.name}: bitte PDF, PNG oder JPEG wählen.`);
+  }
+  return out;
+}
+
+// MIDI in Spuren zerlegen bzw. zusammensetzen (Format 1: Steuerspur + eine Spur je Stimme)
+function midiChunks(bytes){
+  const u32 = p=>((bytes[p]<<24)|(bytes[p+1]<<16)|(bytes[p+2]<<8)|bytes[p+3])>>>0;
+  const id = p=>String.fromCharCode(bytes[p],bytes[p+1],bytes[p+2],bytes[p+3]);
+  if(id(0)!=='MThd') throw new Error('keine MIDI-Datei');
+  const hlen = u32(4), format = (bytes[8]<<8)|bytes[9], division = (bytes[12]<<8)|bytes[13];
+  const tracks = []; let p = 8 + hlen;
+  while(p+8 <= bytes.length){
+    const len = u32(p+4);
+    if(id(p)==='MTrk') tracks.push(bytes.subarray(p+8, Math.min(p+8+len, bytes.length)));
+    p += 8 + len;
+  }
+  return {format, division, tracks};
+}
+function trackInfo(data){
+  let p = 0, status = 0, notes = 0, name = '';
+  const vlq = ()=>{ let v=0,b; do{ b=data[p++]; v=(v<<7)|(b&0x7f); }while(b&0x80 && p<data.length); return v; };
+  while(p < data.length){
+    vlq();
+    const b = data[p];
+    if(b===0xFF){ p++; const type = data[p++], l = vlq();
+      if(type===0x03 && !name) name = new TextDecoder().decode(data.subarray(p, p+l)); p += l; continue; }
+    if(b===0xF0 || b===0xF7){ p++; p += vlq(); continue; }
+    if(b & 0x80){ status = b; p++; }
+    const hi = status & 0xF0, d1 = data[p++], d2 = (hi===0xC0 || hi===0xD0) ? 0 : data[p++];
+    if(hi===0x90 && d2>0) notes++;
+  }
+  return {notes, name};
+}
+function buildMidi(division, tracks){
+  const parts = [], u32 = v=>[(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255];
+  parts.push(new Uint8Array([77,84,104,100, 0,0,0,6, 0,1, (tracks.length>>8)&255, tracks.length&255, (division>>8)&255, division&255]));
+  tracks.forEach(tr=>{ parts.push(new Uint8Array([77,84,114,107, ...u32(tr.length)])); parts.push(tr); });
+  const out = new Uint8Array(parts.reduce((n,a)=>n+a.length, 0)); let o = 0;
+  parts.forEach(a=>{ out.set(a, o); o += a.length; });
+  return out;
+}
+const VOICE_ORDER = ['Sopran','Alt','Tenor','Bass'];
+function voiceName(raw, fallback){
+  const n = (raw||'').trim(), l = n.toLowerCase();
+  if(/^sopran/.test(l)) return 'Sopran';
+  if(/^alt/.test(l)) return 'Alt';
+  if(/^tenor/.test(l)) return 'Tenor';
+  if(/^(bass|base)/.test(l)) return 'Bass';
+  const m = /^voice\s*(\d+)/.exec(l); if(m) return 'Stimme ' + m[1];
+  return n || fallback;
+}
+// Eine Datei mit mehreren Stimmspuren wird aufgeteilt; eine einstimmige Datei ergibt eine Stimme
+// (Name aus dem Dateiende -s/-a/-t/-b, sonst „Alle“).
+function midiFileToVoices(bytes, filename){
+  const {division, tracks} = midiChunks(bytes);
+  const infos = tracks.map(trackInfo);
+  const noteIdx = infos.map((x,i)=>x.notes ? i : -1).filter(i=>i>=0);
+  if(noteIdx.length < 2){
+    const m = /-([satb])\.midi?$/i.exec(filename||'');
+    const name = m ? {s:'Sopran', a:'Alt', t:'Tenor', b:'Bass'}[m[1].toLowerCase()] : 'Alle';
+    return [{name, midi: bytesToDataUri(bytes, 'audio/midi')}];
+  }
+  const conductor = infos[0].notes ? [] : [tracks[0]];
+  return noteIdx.map((i,k)=>({name: voiceName(infos[i].name, 'Stimme ' + (k+1)),
+    midi: bytesToDataUri(buildMidi(division, [...conductor, tracks[i]]), 'audio/midi')}));
+}
+async function filesToVoices(files){
+  let out = [];
+  for(const f of files){
+    if(!/\.midi?$/i.test(f.name) && !/midi/.test(f.type)) throw new Error(`${f.name}: bitte eine MIDI-Datei (.mid) wählen.`);
+    out = out.concat(midiFileToVoices(await readFileBytes(f), f.name));
+  }
+  const order = n=>{ const i = VOICE_ORDER.indexOf(n); return i<0 ? 99 : i; };
+  return out.sort((a,b)=>order(a.name)-order(b.name));
+}
+function voicesToMidi(voices){
+  const parsed = voices.map(v=>midiChunks(dataUriToBytes(v.midi)));
+  const first = parsed[0], conductor = trackInfo(first.tracks[0]).notes ? [] : [first.tracks[0]];
+  const noteTracks = parsed.flatMap(m=>m.tracks.filter(tr=>trackInfo(tr).notes));
+  return buildMidi(first.division, [...conductor, ...noteTracks]);
+}
+
+// Notenbilder als ein PDF (je Bild eine Seite, 144 dpi) – ohne Bibliothek
+async function scoresToPdf(scores){
+  const imgs = [];
+  for(const src of scores){
+    const img = await new Promise((res, rej)=>{ const i = new Image(); i.onload = ()=>res(i); i.onerror = rej; i.src = src; });
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height); ctx.drawImage(img,0,0);
+    imgs.push({w: c.width, h: c.height, jpg: dataUriToBytes(c.toDataURL('image/jpeg', 0.9))});
+  }
+  const enc = new TextEncoder(), chunks = [], offsets = [];
+  let len = 0;
+  const add = x=>{ const b = typeof x==='string' ? enc.encode(x) : x; chunks.push(b); len += b.length; };
+  const obj = (n, body)=>{ offsets[n] = len; add(`${n} 0 obj\n`); body(); add('\nendobj\n'); };
+  add('%PDF-1.4\n');
+  const kids = imgs.map((_,i)=>`${3+3*i} 0 R`).join(' ');
+  obj(1, ()=>add('<< /Type /Catalog /Pages 2 0 R >>'));
+  obj(2, ()=>add(`<< /Type /Pages /Kids [${kids}] /Count ${imgs.length} >>`));
+  imgs.forEach((im,i)=>{
+    const W = (im.w/2).toFixed(2), H = (im.h/2).toFixed(2), pg = 3+3*i;
+    const content = `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q`;
+    obj(pg, ()=>add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im0 ${pg+2} 0 R >> >> /Contents ${pg+1} 0 R >>`));
+    obj(pg+1, ()=>add(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`));
+    obj(pg+2, ()=>{ add(`<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.jpg.length} >>\nstream\n`); add(im.jpg); add('\nendstream'); });
+  });
+  const n = 3 + 3*imgs.length, xref = len;
+  add(`xref\n0 ${n}\n0000000000 65535 f \n` + offsets.slice(1).map(o=>String(o).padStart(10,'0') + ' 00000 n \n').join(''));
+  add(`trailer\n<< /Size ${n} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(len); let o = 0;
+  chunks.forEach(c=>{ out.set(c, o); o += c.length; });
+  return out;
+}
+
+// Lied als Dateien wie im Ordner privat/data auf dem Mac: name.txt (Kopf „Titel, Person, Jahr“,
+// Link-Zeile, Text), name.pdf (Noten), name.mid (alle Stimmen)
+async function songFiles(song){
+  const base = slugify(song.title) || 'lied';
+  const person = (song.performer || song.writers || '').replace(/\s*,\s*/g, ' / ');
+  const head = [song.title, person, song.year].filter(Boolean).join(', ');
+  const txt = [head, '', ...(song.link ? [song.link, ''] : []), song.lyrics || ''].join('\n') + '\n';
+  const files = [new File([txt], base + '.txt', {type: 'text/plain'})];
+  if(song.scores && song.scores.length) files.push(new File([await scoresToPdf(song.scores)], base + '.pdf', {type: 'application/pdf'}));
+  if(song.voices && song.voices.length) files.push(new File([voicesToMidi(song.voices)], base + '.mid', {type: 'audio/midi'}));
+  return files;
+}
+async function saveSongFiles(song){
+  const files = await songFiles(song);
+  if(navigator.canShare && navigator.canShare({files})){
+    try{ await navigator.share({files, title: song.title}); }
+    catch(e){ if(e.name!=='AbortError') throw e; }
+    return;
+  }
+  for(const f of files){
+    const url = URL.createObjectURL(f), a = document.createElement('a');
+    a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }
+}
+
 async function shareSongs({name, songs, lists}){
   // Selbst bearbeitete Lieder ohne Zeitstempel (vor dieser Funktion bearbeitet) bekommen jetzt einen
   const clean = songs.map(({edited, ...s})=>edited && !s.updated ? {...s, updated: nowStamp()} : s);
@@ -891,11 +1101,10 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
                 <div className="chev">&#8250;</div>
               </div>
             </div>
-            {collection.lists.length>0 && <div className="section-label">Listen</div>}
+            <div className="section-label">Listen</div>
             {collection.lists.map(l=>(
               <ListCard key={l.id} list={l} count={l.songIds.length} onOpen={()=>onOpenList(l.id)} />
             ))}
-            <div className="section-label">Meine Listen</div>
             {myLists.map(l=>(
               <ListCard key={l.id} list={l} count={l.songIds.filter(id=>songs[id]).length}
                 onOpen={()=>onOpenList(l.id)} />
@@ -1379,25 +1588,45 @@ function VoicePlayer({voices}){
 // Lied auf diesem Gerät bearbeiten. Ein neuer Import überschreibt die Änderungen.
 function SongEditor({song, onSave, onCancel, onDelete}){
   const [f,setF] = useState({title: song.title, performer: song.performer, writers: song.writers,
-                              year: song.year, lyrics: song.lyrics});
+                              year: song.year, lyrics: song.lyrics, link: song.link || ''});
+  const [scores,setScores] = useState(song.scores || []);
+  const [voices,setVoices] = useState(song.voices || []);
+  const [busy,setBusy] = useState('');
+  const [fileError,setFileError] = useState('');
   const [confirmDiscard,setConfirmDiscard] = useState(false);
   const [confirmDelete,setConfirmDelete] = useState(false);
   const [saving,setSaving] = useState(false);
   const isNew = !song.id;
-  const changed = Object.keys(f).some(k=>f[k]!==song[k]);
+  const changed = Object.keys(f).some(k=>f[k]!==(song[k] || '')) || scores!==(song.scores || []) || voices!==(song.voices || []);
+  const linkOk = !f.link.trim() || /^https:\/\/\S+$/.test(f.link.trim());
+  async function pick(kind, e){
+    const files = [...e.target.files]; e.target.value = '';
+    if(!files.length) return;
+    setFileError(''); setBusy(kind==='scores' ? 'Noten werden umgewandelt …' : 'MIDI wird gelesen …');
+    try{
+      if(kind==='scores') setScores(await filesToScores(files));
+      else setVoices(await filesToVoices(files));
+    }catch(err){ setFileError(err.message || String(err)); }
+    setBusy('');
+  }
   const set = k => e => setF({...f, [k]: e.target.value});
   function cancel(){ changed ? setConfirmDiscard(true) : onCancel(); }
   async function save(){
-    if(!f.title.trim() || saving) return;
+    if(!f.title.trim() || saving || !linkOk || busy) return;
     setSaving(true);
-    const ok = await onSave({...song, id: song.id || newSongId(f.title), title: f.title.trim(), performer: f.performer.trim(),
-      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true, updated: nowStamp()});
+    const {scores: _s, voices: _v, link: _l, ...rest} = song;
+    const next = {...rest, id: song.id || newSongId(f.title), title: f.title.trim(), performer: f.performer.trim(),
+      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true, updated: nowStamp()};
+    if(f.link.trim()) next.link = f.link.trim();
+    if(scores.length) next.scores = scores;
+    if(voices.length) next.voices = voices;
+    const ok = await onSave(next);
     if(!ok) setSaving(false);
   }
   return (
     <React.Fragment>
       <Header title={isNew ? 'Neues Lied' : 'Lied bearbeiten'} onBack={cancel}
-        right={<button className="btn btn-primary" disabled={!f.title.trim() || !changed || saving} onClick={save}>Speichern</button>} />
+        right={<button className="btn btn-primary" disabled={!f.title.trim() || !changed || saving || !linkOk || !!busy} onClick={save}>Speichern</button>} />
       <div className="main editor">
         <div className="field"><label>Titel</label><input value={f.title} onChange={set('title')} /></div>
         <div className="editor-row">
@@ -1407,6 +1636,27 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
           <textarea value={f.lyrics} onChange={set('lyrics')} /></div>
+        <div className="field"><label>Link zum Anhören (Spotify, YouTube …)</label>
+          <input type="url" value={f.link} onChange={set('link')} placeholder="https://open.spotify.com/…"
+            autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          {!linkOk && <div className="hint" style={{color:'var(--danger)'}}>Der Link muss mit https:// beginnen.</div>}</div>
+        <div className="field"><label>Noten (PDF oder Bild)</label>
+          <div className="file-row">
+            <span>{scores.length ? `${scores.length} ${scores.length===1 ? 'Seite' : 'Seiten'}` : 'keine'}</span>
+            <span className="btn btn-secondary file-pick">{scores.length ? 'Ersetzen' : 'Datei wählen'}
+              <input type="file" accept="application/pdf,.pdf,image/png,image/jpeg,image/gif" multiple onChange={e=>pick('scores', e)} /></span>
+            {scores.length>0 && <button className="btn btn-secondary" onClick={()=>setScores([])}>Entfernen</button>}
+          </div></div>
+        <div className="field"><label>Übungsstimmen (MIDI)</label>
+          <div className="file-row">
+            <span>{voices.length ? voices.map(v=>v.name).join(', ') : 'keine'}</span>
+            <span className="btn btn-secondary file-pick">{voices.length ? 'Ersetzen' : 'Datei wählen'}
+              <input type="file" accept=".mid,.midi,audio/midi,audio/x-midi" multiple onChange={e=>pick('voices', e)} /></span>
+            {voices.length>0 && <button className="btn btn-secondary" onClick={()=>setVoices([])}>Entfernen</button>}
+          </div>
+          <div className="hint">Eine Datei mit allen Stimmen (eine Spur je Stimme) oder einzelne Dateien name-s/-a/-t/-b.mid.</div></div>
+        {busy && <div className="hint">{busy}</div>}
+        {fileError && <div className="hint" style={{color:'var(--danger)'}}>{fileError}</div>}
         <div className="hint">Die Änderung gilt nur auf diesem Gerät und bekommt einen Zeitstempel. Bringt eine
           Lieder-Datei später eine ältere Fassung, fragt der Import, welche du behalten willst. Weitergeben kannst du es im Menü ⋯ auf der Startseite oder im Lied.</div>
         {!isNew && onDelete && <button className="btn btn-secondary danger-text" onClick={()=>setConfirmDelete(true)}>Lied löschen</button>}
@@ -1443,7 +1693,7 @@ function ActionMenu({items}){
   );
 }
 
-function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
+function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
   const [showScores,setShowScores] = useState(false);
   const [editing,setEditing] = useState(false);
@@ -1472,7 +1722,9 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite,
             hasScores && {label: scoresVisible ? '♪ Noten ausblenden' : '♪ Noten einblenden', onClick: toggleScores},
             hasVoices && {label: practice ? '♫ Stimmen üben schliessen' : '♫ Stimmen üben', onClick: ()=>setPractice(!practice)},
             {label: '✎ Bearbeiten', onClick: ()=>setEditing(true)},
-            {label: '📤 Weitergeben', onClick: ()=>onShare({name: song.title, songs: [song], lists: []})}
+            {label: '📤 Weitergeben', onClick: ()=>onShare({name: song.title, songs: [song], lists: []})},
+            {label: '💾 Als Dateien sichern (Text' + (hasScores ? ', PDF' : '') + (hasVoices ? ', MIDI' : '') + ')',
+              onClick: ()=>saveSongFiles(song).catch(e=>onError('Sichern hat nicht geklappt: ' + (e.message || e)))}
           ]} />
         </React.Fragment>} />
       <div className="main" style={{'--lyrics-scale': FONT_SCALES[fontIndex]}}>
@@ -1483,10 +1735,15 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, isFavorite,
         {(isFavorite || inLists.length>0 || song.edited) && <div className="song-status no-print">
           {[isFavorite && '★ Favorit', inLists.length>0 && 'In: ' + inLists.join(', '),
             song.edited && 'auf diesem Gerät bearbeitet'].filter(Boolean).join(' · ')}</div>}
+        {((hasScores && !scoresVisible) || hasVoices) && <div className="note-tools no-print">
+          {hasScores && !scoresVisible && <button title="Noten anzeigen" aria-label="Noten anzeigen" onClick={toggleScores}>♪</button>}
+          {hasVoices && <button className={practice ? 'on' : ''} title="Stimmen üben" aria-label="Stimmen üben" onClick={()=>setPractice(!practice)}>♫</button>}
+        </div>}
         {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} />}
-        {scoresVisible
-          ? <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
-          : hasScores && <div className="song-status no-print">♪ Noten ausgeblendet – im Menü ⋯ wieder einblenden</div>}
+        {scoresVisible && hasScores && <div className="scores-wrap" style={{position:'relative'}}>
+          <button className="scores-close no-print" title="Noten ausblenden" aria-label="Noten ausblenden" onClick={toggleScores}>✕</button>
+          <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
+        </div>}
         {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
         {song.updated && <div className="text-stamp">Textstand {formatStamp(song.updated)}</div>}
       </div>
@@ -1843,7 +2100,7 @@ function App(){
   }
   else if(phase==='song' && activeSong){
     view = <SongView key={activeSong.id} song={activeSong} myLists={myLists} onSaveSong={saveSong}
-      onDeleteSong={()=>deleteSong(activeSong.id)} onShare={share}
+      onDeleteSong={()=>deleteSong(activeSong.id)} onShare={share} onError={setSaveError}
       isFavorite={favorites.includes(activeSong.id)} onToggleFavorite={()=>toggleFavorite(activeSong.id)}
       onBack={()=>{ setActiveSongId(null); setPhase(activeListId ? 'list' : 'home'); }}
       fontIndex={fontIndex} onFontChange={changeFont}

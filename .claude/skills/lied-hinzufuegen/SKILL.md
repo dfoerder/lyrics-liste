@@ -154,6 +154,13 @@ weitergeben, meist in die WhatsApp-Gruppe. Der Nutzer sichert die Datei auf dem 
    Liedern werden Titel, Interpret, Songwriter, Jahr und Text ersetzt; Noten, Stimmen und Link
    bleiben.
 
+**Dateien aus der App:** Im Lied gibt es ⋯ → „Als Dateien sichern“. Das ergibt `name.txt`,
+`name.pdf` und `name.mid` im selben Format wie hier. Legt der Nutzer sie in `privat/data` ab,
+liest der Scan sie wie gewohnt. Gibt es das Lied schon in der Sammlung (auch mit anderer id,
+z.B. `app-…` aus der App), nicht als neues Lied aufnehmen, sondern mit
+`verknuepfen "<gruppe>" <id>` verbinden und dann `aus-ordner "<gruppe>" --ersetzen` – so
+bleibt die id und das Lied in den Listen der Familie.
+
 ## Alternative: Text aus der Zwischenablage
 
 Nur, wenn der Nutzer ausdrücklich einen kopierten Text aufnehmen will, ohne Dateien in

@@ -121,7 +121,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `App` — verwaltet `phase` (`home`, `list`, `song`, `print`), `collection`, Import
 - `HomeView` — Suchfeld (Volltextsuche nur auf dem Gerät: `buildSearchIndex`/`searchSongs`,
   fehlertolerant, ohne Netz und ohne KI-Dienst – Texte dürfen das Gerät nicht verlassen; Treffer
-  mit Fundstelle, Suchbegriff bleibt in `App` erhalten), „Favoriten", „Alle Lieder", mitgeschickte Listen, „Meine Listen" + „Neue Liste",
+  mit Fundstelle, Suchbegriff bleibt in `App` erhalten), „Favoriten", „Alle Lieder", unter „Listen" alle Listen (mitgeschickte und eigene) + „Neue Liste",
   Menü ⋯ (importieren, weitergeben, alles entfernen), Stand-Datum
 - `ListView` — Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
   eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
@@ -137,8 +137,16 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
   Zoomstufen
 - `SongEditor` — „✎ Bearbeiten“ im Lied und „+ Neues Lied“ (Alle Lieder, leere Startseite;
-  `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text; speichert über `saveSong` in
-  IndexedDB, Verwerfen mit Rückfrage, „Lied löschen“ (`deleteSong`)
+  `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text, Link (https), Noten hochladen (PDF
+  über pdf.js 3.11.174 von cdnjs, nur bei Bedarf geladen – braucht dann Internet; Seiten als
+  JPEG mit abgeschnittenem Rand, `pdfToScores`/`trimCanvas`; oder PNG/JPEG unverändert),
+  Übungsstimmen hochladen (MIDI, `filesToVoices`: mehrstimmige Datei wird je Spur aufgeteilt,
+  sonst Name aus `-s/-a/-t/-b`); speichert über `saveSong` in IndexedDB, Verwerfen mit
+  Rückfrage, „Lied löschen“ (`deleteSong`)
+- `saveSongFiles` — Liedansicht ⋯ → „Als Dateien sichern“: `name.txt` (Kopf „Titel, Person,
+  Jahr“, Link-Zeile, Text – wie in `privat/data`), `name.pdf` (Notenbilder, eigener kleiner
+  PDF-Schreiber `scoresToPdf`), `name.mid` (alle Stimmen in einer Format-1-Datei,
+  `voicesToMidi`) über das Teilen-Fenster (AirDrop an den Mac, „In Dateien sichern“)
 - `ShareChooser` / `shareSongs` — ⋯ → „Lieder weitergeben“ auf der Startseite (Alle Lieder, Favoriten, eine Liste)
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
@@ -151,7 +159,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Einträge wird kein Menü gezeigt. Liedansicht: Favoriten, Zu Liste hinzufügen, Noten ein-/ausblenden,
   Stimmen üben
   (blendet `VoicePlayer` ein, nur bei `voices`), Bearbeiten, Weitergeben. Darunter nur noch
-  „▶ Song spielen“ und eine Statuszeile (★ Favorit · In: … · bearbeitet)
+  „▶ Song spielen“, eine Statuszeile (★ Favorit · In: … · bearbeitet) und die Noten-Knöpfe
+  (`note-tools`): ♪ blendet ausgeblendete Noten ein, ♫ öffnet „Stimmen üben“; über sichtbaren
+  Noten oben rechts ✕ zum Ausblenden
 - `SongView` / `SongMeta` — Liedtext mit Titel, Interpret · Jahr und „Songwriter: …“;
   ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
   „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
