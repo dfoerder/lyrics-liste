@@ -298,7 +298,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-20';
+const APP_VERSION = '2026-10-22-3';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1020,6 +1020,46 @@ function ListCard({list, count, onOpen}){
   );
 }
 
+// Suchfeld und Trefferliste – auf der Startseite (alle Lieder) und in jeder Liste (nur deren Lieder)
+function SearchField({query, onChange, placeholder}){
+  return (
+    <div className="search">
+      <input type="text" enterKeyHint="search" autoComplete="off" placeholder={placeholder} value={query}
+        onChange={e=>onChange(e.target.value)}
+        onKeyDown={e=>{ if(e.key==='Escape') onChange(''); }} />
+      {query.trim() && <button className="search-clear" title="Suche löschen" onClick={()=>onChange('')}>&#10005;</button>}
+    </div>
+  );
+}
+function SearchResults({results, onOpenSong}){
+  return (
+    <React.Fragment>
+      {results.length===0
+        ? <div className="empty">Kein Lied gefunden.</div>
+        : <div className="hint">{results.length===1 ? '1 Lied gefunden' : `${results.length} Lieder gefunden`}</div>}
+      <ul className="song-list">
+        {results.map(r=>(
+          <li className="song-item" key={r.song.id} onClick={()=>onOpenSong(r.song.id)}>
+            <div className="title">
+              <span className="song-name">{r.song.title}</span>
+              {listSubline(r.song) && <span className="artist">{listSubline(r.song)}</span>}
+              {r.snippet && <span className="snippet">„{r.snippet}“</span>}
+            </div>
+            <div className="chev">&#8250;</div>
+          </li>
+        ))}
+      </ul>
+    </React.Fragment>
+  );
+}
+
+function ClearAllConfirm({hasOwnLists, onConfirm, onCancel}){
+  return <Confirm title="Alle Lieder entfernen?"
+    message={'Alle Lieder und die mitgeschickten Listen kommen zu den gelöschten Liedern. Auf der Startseite über ⋯ → „Gelöschte wiederherstellen“ holst du sie zurück, oder du importierst die Datei erneut.'
+      + (hasOwnLists ? ' Deine eigenen Listen bleiben erhalten und füllen sich beim nächsten Import wieder.' : '')}
+    confirmLabel="Entfernen" danger onConfirm={onConfirm} onCancel={onCancel} />;
+}
+
 function HomeView({collection, myLists, favorites, theme, onThemeChange, onRestore, onPurge, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
   const [showClear,setShowClear] = useState(false);
   const [showNewList,setShowNewList] = useState(false);
@@ -1039,6 +1079,7 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
     <React.Fragment>
       <Header title="Lyrics-Liste" right={
         <ActionMenu items={[
+          {label: '+ Neues Lied', onClick: onNewSong},
           {label: '📥 Lieder importieren', onClick: openFile},
           songCount>0 && {label: '📤 Lieder weitergeben', onClick: ()=>setShowShare(true)},
           songCount>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)},
@@ -1061,30 +1102,8 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
           </div>}
         {songCount===0 && <VersionTap>App-Version: {formatVersion(APP_VERSION)}</VersionTap>}
         {songCount>0 &&
-          <div className="search">
-            <input type="text" enterKeyHint="search" autoComplete="off" placeholder="Lieder durchsuchen (Titel, Text, Interpret)…" value={query}
-              onChange={e=>onQueryChange(e.target.value)}
-              onKeyDown={e=>{ if(e.key==='Escape') onQueryChange(''); }} />
-            {searching && <button className="search-clear" title="Suche löschen" onClick={()=>onQueryChange('')}>&#10005;</button>}
-          </div>}
-        {songCount>0 && searching &&
-          <React.Fragment>
-            {results.length===0
-              ? <div className="empty">Kein Lied gefunden.</div>
-              : <div className="hint">{results.length===1 ? '1 Lied gefunden' : `${results.length} Lieder gefunden`}</div>}
-            <ul className="song-list">
-              {results.map(r=>(
-                <li className="song-item" key={r.song.id} onClick={()=>onOpenSong(r.song.id)}>
-                  <div className="title">
-                    <span className="song-name">{r.song.title}</span>
-                    {listSubline(r.song) && <span className="artist">{listSubline(r.song)}</span>}
-                    {r.snippet && <span className="snippet">„{r.snippet}“</span>}
-                  </div>
-                  <div className="chev">&#8250;</div>
-                </li>
-              ))}
-            </ul>
-          </React.Fragment>}
+          <SearchField query={query} onChange={onQueryChange} placeholder="Lieder durchsuchen (Titel, Text, Interpret)…" />}
+        {songCount>0 && searching && <SearchResults results={results} onOpenSong={onOpenSong} />}
         {songCount>0 && !searching &&
           <React.Fragment>
             <div className="card card-fav">
@@ -1113,12 +1132,8 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
             <VersionTap>Stand Lieder: {formatDate(collection.created || collection.importedAt)} · App-Version: {formatVersion(APP_VERSION)}</VersionTap>
           </React.Fragment>}
       </div>
-      {showClear && <Confirm title="Alle Lieder entfernen?"
-        message={'Alle Lieder und die mitgeschickten Listen kommen zu den gelöschten Liedern. Über ⋯ → „Gelöschte wiederherstellen“ holst du sie zurück, oder du importierst die Datei erneut.'
-          + (myLists.length ? ' Deine eigenen Listen bleiben erhalten und füllen sich beim nächsten Import wieder.' : '')}
-        confirmLabel="Entfernen" danger
-        onConfirm={()=>{ setShowClear(false); onClear(); }}
-        onCancel={()=>setShowClear(false)} />}
+      {showClear && <ClearAllConfirm hasOwnLists={myLists.length>0}
+        onConfirm={()=>{ setShowClear(false); onClear(); }} onCancel={()=>setShowClear(false)} />}
       {showRestore && <RestoreDialog trash={trash}
         onRestore={ids=>{ onRestore(ids); if(ids.length>=trashCount) setShowRestore(false); }}
         onClose={()=>setShowRestore(false)} />}
@@ -1144,12 +1159,16 @@ function listSongs(list, songs){
   return list.own ? present : sortSongs(present);
 }
 
-function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong, onShare}){
+function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong, onShare, onClearAll, hasOwnLists}){
   const [showPicker,setShowPicker] = useState(false);
   const [showRename,setShowRename] = useState(false);
   const [showDelete,setShowDelete] = useState(false);
+  const [showClear,setShowClear] = useState(false);
   const orderedSongs = listSongs(list, songs);
   const missing = list.songIds.length - orderedSongs.length;
+  const listIndex = useMemo(()=>buildSearchIndex(Object.fromEntries(orderedSongs.map(s=>[s.id, s]))), [list, songs]);
+  const searching = query.trim().length>0;
+  const results = useMemo(()=>searchSongs(listIndex, query), [listIndex, query]);
 
   function move(index, delta){
     // Verschieben innerhalb der vorhandenen Lieder; fehlende ids bleiben hinten erhalten
@@ -1172,9 +1191,14 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete,
           orderedSongs.length>0 && {label: '📤 Liste weitergeben', onClick: ()=>onShare({name: list.name, songs: orderedSongs,
             lists: list.id===ALL_ID || list.id===FAV_ID ? [] : [{id: list.id, name: list.name, songIds: orderedSongs.map(s=>s.id)}]})},
           list.own && !list.fixed && {label: '✎ Liste umbenennen', onClick: ()=>setShowRename(true)},
-          !list.fixed && list.id!==ALL_ID && {label: '🗑 Liste löschen', onClick: ()=>setShowDelete(true)}
+          !list.fixed && list.id!==ALL_ID && {label: '🗑 Liste löschen', onClick: ()=>setShowDelete(true)},
+          list.id===ALL_ID && orderedSongs.length>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)}
         ]} />} />
       <div className="main">
+        {orderedSongs.length>0 && <SearchField query={query} onChange={onQueryChange}
+          placeholder={list.id===ALL_ID ? 'Lieder durchsuchen (Titel, Text, Interpret)…' : `In „${list.name}“ suchen …`} />}
+        {searching && <SearchResults results={results} onOpenSong={onOpenSong} />}
+        {!searching && <React.Fragment>
         {missing>0 && <div className="hint">
           {missing===1
             ? '1 Lied dieser Liste ist gerade nicht in der Sammlung. Kommt es mit einer neuen Lieder-Datei zurück, erscheint es wieder.'
@@ -1202,7 +1226,10 @@ function ListView({list, songs, onBack, onOpenSong, onPrint, onUpdate, onDelete,
             </li>
           ))}
         </ul>
+        </React.Fragment>}
       </div>
+      {showClear && <ClearAllConfirm hasOwnLists={hasOwnLists}
+        onConfirm={()=>{ setShowClear(false); onClearAll(); }} onCancel={()=>setShowClear(false)} />}
       {showPicker && <SongPicker songs={songs} excludeIds={list.songIds}
         onPick={id=>onUpdate({...list, songIds:[...list.songIds, id]})}
         onClose={()=>setShowPicker(false)} />}
@@ -1589,15 +1616,16 @@ function VoicePlayer({voices}){
 function SongEditor({song, onSave, onCancel, onDelete}){
   const [f,setF] = useState({title: song.title, performer: song.performer, writers: song.writers,
                               year: song.year, lyrics: song.lyrics, link: song.link || ''});
-  const [scores,setScores] = useState(song.scores || []);
-  const [voices,setVoices] = useState(song.voices || []);
+  const initial = useRef({scores: song.scores || [], voices: song.voices || []}).current;
+  const [scores,setScores] = useState(initial.scores);
+  const [voices,setVoices] = useState(initial.voices);
   const [busy,setBusy] = useState('');
   const [fileError,setFileError] = useState('');
   const [confirmDiscard,setConfirmDiscard] = useState(false);
   const [confirmDelete,setConfirmDelete] = useState(false);
   const [saving,setSaving] = useState(false);
   const isNew = !song.id;
-  const changed = Object.keys(f).some(k=>f[k]!==(song[k] || '')) || scores!==(song.scores || []) || voices!==(song.voices || []);
+  const changed = Object.keys(f).some(k=>f[k]!==(song[k] || '')) || scores!==initial.scores || voices!==initial.voices;
   const linkOk = !f.link.trim() || /^https:\/\/\S+$/.test(f.link.trim());
   async function pick(kind, e){
     const files = [...e.target.files]; e.target.value = '';
@@ -1950,6 +1978,7 @@ function App(){
   const [activeListId,setActiveListId] = useState(null);
   const [activeSongId,setActiveSongId] = useState(null);
   const [searchQuery,setSearchQuery] = useState('');
+  const [listQuery,setListQuery] = useState('');   // Suche innerhalb der geöffneten Liste
   const [theme,setTheme] = useState(()=>{ const m = loadJSON(LS_THEME, 'auto'); return THEMES[m] ? m : 'auto'; });
   useEffect(()=>{
     applyTheme(theme);
@@ -2024,6 +2053,7 @@ function App(){
     const l = {id: uid(), name, songIds: []};
     setMyLists(prev=>[...prev, l]);
     setActiveListId(l.id);
+    setListQuery('');
     setPhase('list');
   }
   function toggleSongInList(listId, songId){
@@ -2091,6 +2121,8 @@ function App(){
   let view;
   if(phase==='list' && activeList){
     view = <ListView list={activeList} songs={songs}
+      query={listQuery} onQueryChange={setListQuery}
+      onClearAll={clearAll} hasOwnLists={myLists.length>0}
       onBack={goHome}
       onOpenSong={id=>{ setActiveSongId(id); setPhase('song'); }}
       onPrint={()=>setPhase('print')}
@@ -2121,7 +2153,7 @@ function App(){
       query={searchQuery} onQueryChange={setSearchQuery}
       onOpenSong={id=>{ setActiveListId(null); setActiveSongId(id); setPhase('song'); }}
       onShare={share} onNewSong={newSong}
-      onOpenList={id=>{ setActiveListId(id); setPhase('list'); }}
+      onOpenList={id=>{ setActiveListId(id); setListQuery(''); setPhase('list'); }}
       onImportFile={handleImportFile}
       onClear={clearAll}
       onCreateMyList={createMyList} />;

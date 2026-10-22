@@ -123,7 +123,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   fehlertolerant, ohne Netz und ohne KI-Dienst – Texte dürfen das Gerät nicht verlassen; Treffer
   mit Fundstelle, Suchbegriff bleibt in `App` erhalten), „Favoriten", „Alle Lieder", unter „Listen" alle Listen (mitgeschickte und eigene) + „Neue Liste",
   Menü ⋯ (importieren, weitergeben, alles entfernen), Stand-Datum
-- `ListView` — Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
+- `ListView` — oben ein Suchfeld, das nur in den Liedern dieser Liste sucht (`SearchField`/
+  `SearchResults`, gleiche Suche wie auf der Startseite; Begriff in `App` `listQuery`, beim
+  Öffnen einer Liste geleert); Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
   eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
   Entfernen/Umbenennen/Löschen
 - `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
@@ -150,8 +152,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `ShareChooser` / `shareSongs` — ⋯ → „Lieder weitergeben“ auf der Startseite (Alle Lieder, Favoriten, eine Liste)
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
-- `ActionMenu` — Menü „⋯“ oben rechts. Startseite: Lieder importieren, weitergeben, alle
-  entfernen, Darstellung. Listenansicht: Neues Lied (Alle Lieder), Lieder hinzufügen (eigene
+- `ActionMenu` — Menü „⋯“ oben rechts. Startseite: Neues Lied, Lieder importieren, weitergeben, alle
+  entfernen, Darstellung. Listenansicht: Neues Lied und Alle Lieder entfernen (Alle Lieder), Lieder hinzufügen (eigene
   Listen, Favoriten), Drucken / Anzeigen, Liste weitergeben (alle Listen), Liste umbenennen
   (eigene), Liste löschen (alle außer „Alle Lieder“ und Favoriten; `deleteList(withSongs)`:
   nur die Liste oder auch ihre Lieder, die dann aus allen Listen verschwinden; eine
