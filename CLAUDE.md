@@ -80,7 +80,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `tools/mxl_zu_stimmen.py` repariert typische Erkennungsfehler und meldet unklare Takte
   als PRÜFEN → `privat/data/<name>.stimmen`; unklare Stellen mit
   `tools/noten_raster.swift` (Lesehilfe mit Tonhöhen-Raster) nachsehen; MIDI mit
-  `tools/midi_schreiben.py`. `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
+  `tools/midi_schreiben.py`; als Partitur für MuseScore & Co. `tools/stimmen_zu_musicxml.py`
+  (`.stimmen` → `.musicxml`, je Stimme eine Partie, ohne Liedtext) bzw. `tools/midi_zu_musicxml.py`
+  (eine oder mehrere `.mid` → `.musicxml`; rückt eingespielte Töne aufs Raster 1/12 Viertel,
+  schließt Artikulationslücken, Triolen/Taktwechsel/Akkorde; `write_score` gemeinsam). `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
   rendert kleine Seiten mit mindestens 1100 px Breite.
 - `lieder.py uebernehmen <datei> [--alle | --id …] [--liste …]` — Datei aus der App (von der
   Familie weitergegeben) mit der Sammlung vergleichen: NEU/GEÄNDERT anzeigen (ohne Texte) und
