@@ -174,6 +174,13 @@ a.btn{display:inline-block;text-decoration:none}
 @media screen{
   .song-print + .song-print{margin-top:2.8rem;padding-top:1.8rem;border-top:1px solid var(--border2)}
 }
+.chord-view .chord-line{padding-left:0;text-indent:0;margin-bottom:.15em}
+.chord-view .cw{white-space:nowrap}
+.chord-view .cs{display:inline-flex;flex-direction:column;vertical-align:bottom}
+.chord-view .cc{font-size:.82em;font-weight:700;color:var(--accent-dark);line-height:1.2;padding-right:.3em;white-space:pre}
+.chord-view .ct{white-space:pre}
+.chord-bar{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;font-size:.85rem;color:var(--text2);margin:0 0 .8rem}
+.chord-bar .size-btn{width:2rem;height:2rem;border:1px solid var(--border2)}
 .edited-note{font-size:.78rem;color:var(--muted);margin:-.6rem 0 1rem}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
@@ -284,6 +291,9 @@ const LS_FONT_SIZE = 'lyrics-schriftgroesse';
 const LS_FAVORITES = 'lyrics-favoriten';
 // Noten in der Liedansicht anzeigen (true/false), pro Gerät für alle Lieder gemerkt
 const LS_SHOW_SCORES = 'lyrics-noten-zeigen';
+// Gitarrenakkorde über dem Text zeigen (true/false) und Transponierung je Lied ({id: Halbtöne})
+const LS_SHOW_CHORDS = 'lyrics-akkorde-zeigen';
+const LS_TRANSPOSE = 'lyrics-transponieren';
 // Darstellung: 'auto' (wie iPhone), 'hell', 'dunkel' – wird auch im <head> vor dem Zeichnen gelesen
 const LS_THEME = 'lyrics-darstellung';
 const THEMES = {auto: 'Automatisch (wie iPhone)', hell: 'Immer hell', dunkel: 'Immer dunkel'};
@@ -298,7 +308,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-22-3';
+const APP_VERSION = '2026-10-26';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -517,6 +527,11 @@ function parseCollection(text){
     if(voices.length) songs[id].voices = voices;
     if(/^https:\/\/\S+$/.test(str(s.link))) songs[id].link = str(s.link);
     if(str(s.updated) && !isNaN(Date.parse(str(s.updated)))) songs[id].updated = str(s.updated);
+    if(str(s.chords) && cleanLyrics(stripChords(str(s.chords))) === songs[id].lyrics){
+      songs[id].chords = str(s.chords).replace(/\r\n/g,'\n');
+      const capo = parseInt(s.capo, 10);
+      if(capo>0 && capo<12) songs[id].capo = capo;
+    }
   });
   if(Object.keys(songs).length===0) throw new Error('Die Datei enthält keine Lieder.');
   const lists = (Array.isArray(data.lists) ? data.lists : [])
@@ -534,7 +549,7 @@ function formatStamp(s){
   if(t===-Infinity) return 'ohne Zeitstempel';
   return new Date(t).toLocaleString('de-CH', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
 }
-const CONTENT_FIELDS = ['title','performer','writers','year','lyrics'];
+const CONTENT_FIELDS = ['title','performer','writers','year','lyrics','chords','capo'];
 function sameContent(a, b){ return CONTENT_FIELDS.every(k=>(a[k]||'')===(b[k]||'')); }
 
 // Vergleicht eine Import-Datei mit dem Gerät: neu, wird ersetzt, gleich, oder Konflikt
@@ -1297,6 +1312,97 @@ function ScoreViewer({scores, title, onClose}){
   );
 }
 
+// ---------- Gitarrenakkorde (ChordPro im Text: „Her[E]bei“), Transponieren
+function stripChords(text){ return (text||'').replace(/\[[^\]\n]*\]/g, ''); }
+
+// Deutsche Schreibweise (H, B = Bb, Fis, Es, fis = Moll) oder englische (B, Bb, F#, Am)
+const NAMES = {
+  de: {sharp: ['C','Cis','D','Dis','E','F','Fis','G','Gis','A','Ais','H'], flat: ['C','Des','D','Es','E','F','Ges','G','As','A','B','H']},
+  en: {sharp: ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'], flat: ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B']}
+};
+// ♭-Tonarten: F, B, Es, As, Des (Dur) bzw. d, g, c, f, b (Moll) – sonst ♯
+function flatKey(n, minor){ return (minor ? [2,7,0,5,10] : [5,10,3,8,1]).includes(((n%12)+12)%12); }
+const DE_STEP = {c:0,d:2,e:4,f:5,g:7,a:9,h:11,b:10};
+const EN_STEP = {c:0,d:2,e:4,f:5,g:7,a:9,b:11};
+function chordsAreGerman(text){
+  const de = /\[\(?([Hh]|[a-h]|[A-Ha-h](is|es)|[AE]s(?![a-z]))/.test(text||'');
+  const en = /\[\(?[A-G](#|b|m(?!aj))/.test(text||'');
+  return de || !en;
+}
+function parseRoot(s, german){
+  const m = german ? /^([A-Ha-h])(is|es|s(?=$|[^a-z]))?/.exec(s) : /^([A-Ga-g])([#b])?/.exec(s);
+  if(!m) return null;
+  let n = (german ? DE_STEP : EN_STEP)[m[1].toLowerCase()];
+  if(n===undefined) return null;
+  if(german){ if(m[2]==='is') n++; else if(m[2]==='es' || m[2]==='s') n--; }
+  else { if(m[2]==='#') n++; else if(m[2]==='b') n--; }
+  return {n: (n+12)%12, minor: german && m[1]===m[1].toLowerCase(), rest: s.slice(m[0].length)};
+}
+function nameOf(n, minor, german, flat){
+  const name = NAMES[german ? 'de' : 'en'][flat ? 'flat' : 'sharp'][(n%12+12)%12];
+  return minor ? name.toLowerCase() : name;
+}
+function transposeChord(chord, shift, german, flat){
+  if(!shift) return chord;
+  const paren = /^\((.*)\)$/.exec(chord);
+  const inner = paren ? paren[1] : chord;
+  const [main, bass] = inner.split('/');
+  const r = parseRoot(main, german);
+  if(!r) return chord;
+  let out = nameOf(r.n+shift, r.minor, german, flat) + r.rest;
+  if(bass){ const b = parseRoot(bass, german); out += '/' + (b ? nameOf(b.n+shift, false, german, flat) + b.rest : bass); }
+  return paren ? `(${out})` : out;
+}
+// Tonart = erster Akkord (Grundton + Moll?), nach dem Transponieren
+function chordKey(text, shift, german){
+  const m = /\[\(?([^\]\)\/]+)/.exec(text||'');
+  const r = m && parseRoot(m[1], german);
+  if(!r) return null;
+  const minor = r.minor || /^m(?!aj)/.test(r.rest);
+  const flat = flatKey(r.n+shift, minor);
+  const name = nameOf(r.n+shift, false, german, flat);
+  return {flat, label: minor ? `${name.toLowerCase()}-Moll` : `${name}-Dur`};
+}
+// Eine Zeile in Wörter zerlegen; jedes Wort besteht aus Stücken {chord, text}. Wörter brechen nie.
+function chordWords(line){
+  const words = [[]];
+  line.split(/(\[[^\]]*\])/).forEach(part=>{
+    if(!part) return;
+    const m = /^\[([^\]]*)\]$/.exec(part);
+    if(m){ words[words.length-1].push({chord: m[1], text: ''}); return; }
+    part.split(/( +)/).forEach((piece, k)=>{
+      if(!piece) return;
+      if(/^ +$/.test(piece)){ words.push(' ', []); return; }
+      const w = words[words.length-1], last = w[w.length-1];
+      if(last && !last.text && last.chord!==null && k===0) last.text = piece;
+      else w.push({chord: null, text: piece});
+    });
+  });
+  return words.filter(w=>w===' ' || w.length);
+}
+function ChordSheet({text, shift, german, flat}){
+  return (
+    <div className="lyrics-view chord-view">
+      {text.split('\n').map((line,i)=>{
+        if(!line.trim()) return <div className="lyrics-gap" key={i} />;
+        if(SECTION_LABEL.test(stripChords(line).trim())) return <div className="lyrics-label" key={i}>{stripChords(line).trim().replace(/:$/,'')}</div>;
+        if(!/\[/.test(line)) return <div className="lyrics-line" key={i}>{line}</div>;
+        return (
+          <div className="lyrics-line chord-line" key={i}>
+            {chordWords(line).map((w,k)=> w===' ' ? ' ' :
+              <span className="cw" key={k}>{w.map((p,j)=>
+                <span className="cs" key={j}>
+                  <span className="cc">{p.chord ? transposeChord(p.chord, shift, german, flat) : ' '}</span>
+                  <span className="ct">{p.text || ' '}</span>
+                </span>)}
+              </span>)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Lyrics({text}){
   if(!text) return <div className="lyrics-view lyrics-empty">(kein Text hinterlegt)</div>;
   return (
@@ -1648,6 +1754,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
     if(f.link.trim()) next.link = f.link.trim();
     if(scores.length) next.scores = scores;
     if(voices.length) next.voices = voices;
+    if(next.chords && stripChords(next.chords) !== next.lyrics){ delete next.chords; delete next.capo; }
     const ok = await onSave(next);
     if(!ok) setSaving(false);
   }
@@ -1663,7 +1770,8 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         </div>
         <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
-          <textarea value={f.lyrics} onChange={set('lyrics')} /></div>
+          <textarea value={f.lyrics} onChange={set('lyrics')} />
+          {song.chords && cleanLyrics(f.lyrics)!==song.lyrics && <div className="hint" style={{color:'var(--danger)'}}>Dieses Lied hat Gitarrenakkorde. Wenn du den Text änderst, gehen sie beim Speichern verloren.</div>}</div>
         <div className="field"><label>Link zum Anhören (Spotify, YouTube …)</label>
           <input type="url" value={f.link} onChange={set('link')} placeholder="https://open.spotify.com/…"
             autoCapitalize="off" autoCorrect="off" spellCheck={false} />
@@ -1727,6 +1835,24 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
   const [editing,setEditing] = useState(false);
   const [practice,setPractice] = useState(false);
   const [scoresVisible,setScoresVisible] = useState(()=>loadJSON(LS_SHOW_SCORES, true)!==false);
+  const hasChords = !!song.chords;
+  const [chordsVisible,setChordsVisible] = useState(()=>loadJSON(LS_SHOW_CHORDS, false)===true);
+  const [shift,setShift] = useState(()=>{ const m = loadJSON(LS_TRANSPOSE, {}); return (m && Number.isInteger(m[song.id])) ? m[song.id] : 0; });
+  const german = useMemo(()=>chordsAreGerman(song.chords), [song.chords]);
+  function toggleChords(){
+    const v = !chordsVisible;
+    setChordsVisible(v);
+    try{ localStorage.setItem(LS_SHOW_CHORDS, JSON.stringify(v)); }catch(e){}
+  }
+  function changeShift(d){
+    setShift(prev=>{
+      let v = d===0 ? 0 : (((prev + d) % 12) + 12) % 12;   // -5 … +6 Halbtöne
+      if(v > 6) v -= 12;
+      try{ const m = loadJSON(LS_TRANSPOSE, {}) || {}; if(v) m[song.id] = v; else delete m[song.id]; localStorage.setItem(LS_TRANSPOSE, JSON.stringify(m)); }catch(e){}
+      return v;
+    });
+  }
+  const key = hasChords ? chordKey(song.chords, shift, german) : null;
   function toggleScores(){
     const v = !scoresVisible;
     setScoresVisible(v);
@@ -1748,6 +1874,7 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
             {label: isFavorite ? '★ Aus Favoriten entfernen' : '☆ Zu Favoriten', onClick: onToggleFavorite},
             {label: '+ Zu Liste hinzufügen', onClick: ()=>setShowChooser(true)},
             hasScores && {label: scoresVisible ? '♪ Noten ausblenden' : '♪ Noten einblenden', onClick: toggleScores},
+            hasChords && {label: chordsVisible ? '🎸 Akkorde ausblenden' : '🎸 Akkorde anzeigen', onClick: toggleChords},
             hasVoices && {label: practice ? '♫ Stimmen üben schliessen' : '♫ Stimmen üben', onClick: ()=>setPractice(!practice)},
             {label: '✎ Bearbeiten', onClick: ()=>setEditing(true)},
             {label: '📤 Weitergeben', onClick: ()=>onShare({name: song.title, songs: [song], lists: []})},
@@ -1763,8 +1890,9 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
         {(isFavorite || inLists.length>0 || song.edited) && <div className="song-status no-print">
           {[isFavorite && '★ Favorit', inLists.length>0 && 'In: ' + inLists.join(', '),
             song.edited && 'auf diesem Gerät bearbeitet'].filter(Boolean).join(' · ')}</div>}
-        {((hasScores && !scoresVisible) || hasVoices) && <div className="note-tools no-print">
+        {((hasScores && !scoresVisible) || hasVoices || hasChords) && <div className="note-tools no-print">
           {hasScores && !scoresVisible && <button title="Noten anzeigen" aria-label="Noten anzeigen" onClick={toggleScores}>♪</button>}
+          {hasChords && <button className={chordsVisible ? 'on' : ''} title="Gitarrenakkorde" aria-label="Gitarrenakkorde" onClick={toggleChords}>🎸</button>}
           {hasVoices && <button className={practice ? 'on' : ''} title="Stimmen üben" aria-label="Stimmen üben" onClick={()=>setPractice(!practice)}>♫</button>}
         </div>}
         {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} />}
@@ -1772,7 +1900,16 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
           <button className="scores-close no-print" title="Noten ausblenden" aria-label="Noten ausblenden" onClick={toggleScores}>✕</button>
           <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
         </div>}
-        {(song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
+        {hasChords && chordsVisible && <div className="chord-bar no-print">
+          <span>🎸 {key ? key.label : ''}{song.capo ? ` · Kapo ${song.capo}` : ''}</span>
+          <button className="size-btn" title="Einen Halbton tiefer" onClick={()=>changeShift(-1)}>−</button>
+          <button className="size-btn" title="Einen Halbton höher" onClick={()=>changeShift(1)}>+</button>
+          <span>{shift ? `transponiert ${shift>0 ? '+' : ''}${shift}` : 'Original'}</span>
+          {shift!==0 && <button className="btn btn-secondary" style={{padding:'.25rem .6rem',fontSize:'.8rem'}} onClick={()=>changeShift(0)}>zurück</button>}
+        </div>}
+        {hasChords && chordsVisible
+          ? <ChordSheet text={song.chords} shift={shift} german={german} flat={key ? key.flat : false} />
+          : (song.lyrics || !hasScores) && <Lyrics text={song.lyrics} />}
         {song.updated && <div className="text-stamp">Textstand {formatStamp(song.updated)}</div>}
       </div>
       {showScores && <ScoreViewer scores={song.scores} title={song.title} onClose={()=>setShowScores(false)} />}

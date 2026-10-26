@@ -61,7 +61,7 @@ def stamp_time(s):
         return datetime.datetime.min
 
 
-CONTENT_KEYS = ('title', 'performer', 'writers', 'year', 'lyrics')
+CONTENT_KEYS = ('title', 'performer', 'writers', 'year', 'lyrics', 'chords', 'capo')
 
 
 def same_content(a, b):
@@ -429,6 +429,13 @@ def cmd_hinzufuegen(args, data):
     link = pick(args.link, 'link')
     if link:
         song['link'] = check_link(link)
+    if keep.get('chords'):
+        if strip_chords(keep['chords']) == lyrics:
+            song['chords'] = keep['chords']
+            if keep.get('capo'):
+                song['capo'] = keep['capo']
+        else:
+            print('HINWEIS: Die Akkorde wurden entfernt, weil sich der Text geändert hat.')
 
     total, sections = describe(lyrics)
     status = 'Probelauf – nichts gespeichert' if args.probelauf else ('aktualisiert' if existing else 'neu')
@@ -726,6 +733,7 @@ def cmd_uebersicht(args, data):
               f'{total} Zeilen in {stanzas} {"Strophe" if stanzas == 1 else "Strophen"}'
               + (f' | Noten: {scores_info(s)}' if s.get('scores') else '')
               + (f' | Stimmen: {voices_info(s)}' if s.get('voices') else '')
+              + (f' | Akkorde: {chords_info(s)}' if s.get('chords') else '')
               + (' | Link' if s.get('link') else '')
               + (f' | Listen: {", ".join(lists)}' if lists else ''))
     for l in data['lists']:
@@ -778,6 +786,8 @@ def validate(data):
         if s.get('id') in ids:
             problems.append(f'Doppelte id: {s["id"]}')
         ids.add(s.get('id'))
+        if s.get('chords') and strip_chords(s['chords']) != s.get('lyrics'):
+            problems.append(f'{song_line(s)}: Akkorde passen nicht mehr zum Text')
         if s.get('link') and not re.fullmatch(r'https://\S+', s['link']):
             problems.append(f'{song_line(s)}: Link muss mit https:// beginnen')
         if not s.get('lyrics') and not s.get('scores'):
@@ -852,7 +862,7 @@ def cmd_export(args, data):
 # Ein Lied im Ordner = gleicher Dateiname mit .txt (Kopf + Text), .pdf (Noten), .mid (Stimmen).
 # Varianten: Noten als Bild (name.png / name-noten.png), Stimmen einzeln (name-s/-a/-t/-b.mid).
 DEFAULT_DATA = ROOT / 'privat' / 'data'
-SCAN_EXT = {'.pdf', '.mid', '.txt', '.png', '.gif', '.jpg', '.jpeg'}
+SCAN_EXT = {'.pdf', '.mid', '.txt', '.png', '.gif', '.jpg', '.jpeg', '.akkorde'}
 IMAGE_EXT = {'.png', '.gif', '.jpg', '.jpeg'}
 IGNORE_DIRS = {'alt', 'mp3'}          # Ablage-Unterordner, keine Lieder
 VOICE_TAIL = re.compile(r'-(s|a|t|b)$', re.I)
@@ -869,6 +879,80 @@ def load_state(args):
 
 def save_state(args, state):
     state_path(args).write_text(json.dumps(state, ensure_ascii=False, indent=1, sort_keys=True) + '\n', encoding='utf-8')
+
+
+# ---------------------------------------------------------------- Akkorde (Gitarre)
+# song['chords'] = derselbe Text wie song['lyrics'], mit Akkorden im ChordPro-Format davor: „Her[E]bei“.
+# Ohne die [..]-Teile muss er genau song['lyrics'] ergeben. song['capo'] = Bund des Kapodasters (fehlt = 0).
+# Quelle ist eine Muster-Datei name.akkorde neben der .txt – so wird der Liedtext nie abgetippt:
+#
+#     # Akkorde vom Blatt, E-Dur, ohne Kapo
+#     kapo: 0
+#     1: bei=E Gläub=H7 fröh=E phie=(H7) las=E las= las=fis
+#     2: Kö=E Eh=H7 …
+#
+# Je Strophe (Nummer = Block im Text) Paare Suchtext=Akkord. Gesucht wird der Reihe nach ab dem
+# letzten Treffer; der Akkord steht vor dem Suchtext. „las=“ ohne Akkord überspringt ein Vorkommen.
+
+CHORD_MARK = re.compile(r'\[[^\]\n]*\]')
+
+
+def strip_chords(text):
+    return CHORD_MARK.sub('', text or '')
+
+
+def read_chord_spec(path):
+    capo, stanzas = 0, {}
+    for n, line in enumerate(Path(path).read_text(encoding='utf-8').splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        key, sep, val = line.partition(':')
+        key = key.strip().lower()
+        if not sep:
+            raise Fehler(f'{Path(path).name}, Zeile {n}: erwartet „kapo: 0“ oder „1: Suchtext=Akkord …“')
+        if key == 'kapo':
+            capo = int(val.strip() or 0)
+            continue
+        if not key.isdigit():
+            raise Fehler(f'{Path(path).name}, Zeile {n}: „{key}“ ist keine Strophennummer')
+        pairs = []
+        for tok in val.split():
+            needle, eq, chord = tok.rpartition('=')
+            if not eq or not needle:
+                raise Fehler(f'{Path(path).name}, Zeile {n}: „{tok}“ – erwartet Suchtext=Akkord')
+            pairs.append((needle, chord))
+        stanzas[int(key)] = pairs
+    return capo, stanzas
+
+
+def apply_chords(lyrics, stanzas):
+    """Akkorde aus dem Muster in den Text setzen → ChordPro-Text."""
+    blocks = [(m.start(), m.end()) for m in re.finditer(r'(?:^.+$\n?)+', lyrics, re.M)]
+    inserts = []
+    for n, pairs in sorted(stanzas.items()):
+        if not 1 <= n <= len(blocks):
+            raise Fehler(f'Akkorde für Strophe {n}, der Text hat aber nur {len(blocks)} Strophen')
+        cursor, end = blocks[n - 1]
+        for needle, chord in pairs:
+            idx = lyrics.find(needle, cursor, end)
+            if idx < 0:
+                raise Fehler(f'Akkorde, Strophe {n}: „{needle}“ nicht gefunden (nach dem vorherigen Treffer)')
+            if chord:
+                inserts.append((idx, chord))
+            cursor = idx + len(needle)
+    out = lyrics
+    for idx, chord in sorted(inserts, reverse=True):
+        out = out[:idx] + f'[{chord}]' + out[idx:]
+    assert strip_chords(out) == lyrics
+    return out
+
+
+def chords_info(song):
+    if not song.get('chords'):
+        return ''
+    n = len(CHORD_MARK.findall(song['chords']))
+    return f'{n} Akkorde' + (f', Kapo {song["capo"]}' if song.get('capo') else ', ohne Kapo')
 
 
 def scan_groups(daten):
@@ -889,7 +973,7 @@ def scan_groups(daten):
             stem, kind = (stem[:-6] if stem.endswith('-noten') else stem), 'bild'
         key = stem if str(rel_dir) == '.' else str(rel_dir / stem)
         key = unicodedata.normalize('NFC', key)   # macOS liefert Umlaute zerlegt (NFD)
-        g = groups.setdefault(key, {'txt': None, 'pdf': None, 'mid': None, 'bild': [], 'stimmen': []})
+        g = groups.setdefault(key, {'txt': None, 'pdf': None, 'mid': None, 'akkorde': None, 'bild': [], 'stimmen': []})
         if kind in ('bild', 'stimme'):
             g['bild' if kind == 'bild' else 'stimmen'].append(f)
         else:
@@ -898,7 +982,7 @@ def scan_groups(daten):
 
 
 def group_files(g):
-    return [f for f in (g['txt'], g['pdf'], g['mid']) if f] + g['bild'] + g['stimmen']
+    return [f for f in (g['txt'], g['pdf'], g['mid'], g.get('akkorde')) if f] + g['bild'] + g['stimmen']
 
 
 def file_hashes(g):
@@ -1028,6 +1112,15 @@ def cmd_aus_ordner(args, data):
         song['link'] = re.sub(r'\?si=\S*$', '', urls[0])   # Spotify-Tracking-Anhang weglassen
     elif existing and existing.get('link'):
         song['link'] = existing['link']
+    if g.get('akkorde'):
+        capo, spec = read_chord_spec(g['akkorde'])
+        song['chords'] = apply_chords(lyrics, spec)
+        if capo:
+            song['capo'] = capo
+    elif existing and existing.get('chords') and strip_chords(existing['chords']) == lyrics:
+        song['chords'] = existing['chords']
+        if existing.get('capo'):
+            song['capo'] = existing['capo']
 
     total, _ = describe(lyrics)
     sizes = stanza_sizes(lyrics)
@@ -1042,6 +1135,10 @@ def cmd_aus_ordner(args, data):
         print(f'Entfernt: {rep["akkordzeilen"]} Akkordzeilen, {len(rep["fusszeilen"])} Fußzeilen, {rep["sonstige"]} sonstige')
     print('Noten: ' + (scores_info(song) or 'keine'))
     print('Stimmen: ' + (voices_info(song) or 'keine'))
+    if song.get('chords'):
+        print('Akkorde: ' + chords_info(song) + ('' if g.get('akkorde') else ' (beibehalten)'))
+    elif existing and existing.get('chords'):
+        print('HINWEIS: Die Akkorde wurden entfernt, weil sich der Text geändert hat – .akkorde-Datei anlegen/prüfen.')
     if song.get('link'):
         print(f'Link: {song["link"]}' + ('' if urls else ' (beibehalten)'))
     others = [s for s in data['songs'] if s['id'] != sid and same_title(s['title'], title)]
@@ -1073,6 +1170,28 @@ def cmd_verknuepfen(args, data):
     save_state(args, state)
     print(f'Verknüpft: {args.gruppe} → {song_line(s)}')
     return False
+
+
+def cmd_akkorde(args, data):
+    """Akkorde aus einer Muster-Datei in den Text eines vorhandenen Liedes setzen (oder entfernen)."""
+    s = require_song(data, args.id)
+    if args.entfernen:
+        s.pop('chords', None)
+        s.pop('capo', None)
+        print(f'Akkorde entfernt: {song_line(s)}')
+        return True
+    if not args.muster:
+        raise Fehler('Muster-Datei angeben (name.akkorde) oder --entfernen.')
+    capo, spec = read_chord_spec(Path(args.muster).expanduser())
+    s['chords'] = apply_chords(s.get('lyrics', ''), spec)
+    if capo:
+        s['capo'] = capo
+    else:
+        s.pop('capo', None)
+    s['updated'] = now_stamp()
+    per = [f'Str. {n}: {len(pairs) - sum(1 for _, c in pairs if not c)}' for n, pairs in sorted(spec.items())]
+    print(f'Akkorde gesetzt: {song_line(s)} – {chords_info(s)} ({", ".join(per)})')
+    return True
 
 
 def cmd_ignorieren(args, data):
@@ -1233,6 +1352,11 @@ def main(argv=None):
     k = sub.add_parser('verknuepfen', help='vorhandenes Lied mit einer Dateigruppe verbinden')
     k.add_argument('gruppe')
     k.add_argument('id')
+    k2 = sub.add_parser('akkorde', help='Gitarrenakkorde aus einer Muster-Datei (.akkorde) setzen')
+    k2.add_argument('id')
+    k2.add_argument('muster', nargs='?', metavar='DATEI')
+    k2.add_argument('--entfernen', action='store_true')
+
     i = sub.add_parser('ignorieren', help='Dateigruppe beim Scan übergehen')
     i.add_argument('gruppe')
 
@@ -1252,7 +1376,7 @@ def main(argv=None):
         args.gruppe = unicodedata.normalize('NFC', args.gruppe)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
                 'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'scan': cmd_scan,
-                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'uebernehmen': cmd_uebernehmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
+                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'akkorde': cmd_akkorde, 'uebernehmen': cmd_uebernehmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
     try:
         data = load(args.datei)
         if commands[args.befehl](args, data):

@@ -279,6 +279,29 @@ python3 tools/lieder.py bearbeiten <id> --link "https://open.spotify.com/…"
 
 `--link ""` entfernt den Link. Beim Ersetzen des Textes bleibt er erhalten.
 
+## Gitarrenakkorde
+
+Die App zeigt auf Wunsch Akkorde über dem Liedtext (🎸), mit Transponieren. Die Akkorde kommen
+meist von einem Blatt, auf dem jemand sie von Hand über den Text geschrieben hat (Scan/Foto).
+
+1. **Ablesen:** Welcher Akkord steht über welcher Silbe? Deutsche Schreibweise übernehmen
+   (H7, Fis = Dur, fis = Moll, Klammern = optional). Unklare Stellen nachfragen, nicht raten.
+   Bei Chorälen haben meist alle Strophen dasselbe Muster – Abweichungen sind verdächtig.
+   Tonart und Kapodaster klären (z.B. E-Dur ohne Kapo, weil tiefer gesungen wird).
+2. **Muster-Datei** `privat/data/<ordner>/<name>.akkorde` schreiben – nie den Liedtext abtippen:
+   ```
+   # Gitarrenakkorde vom Blatt, E-Dur, ohne Kapodaster
+   kapo: 0
+   1: bei=E Gläub=H7 fröh=E phie=(H7) … las=E las= las=fis be=H7 Herrn=E
+   2: Kö=E Eh=H7 …
+   ```
+   Je Strophe der Reihe nach `Suchtext=Akkord`; der Akkord kommt vor den Suchtext (ein kurzes
+   Stück der Silbe). `las=` ohne Akkord überspringt ein Vorkommen. Weicht der Text auf dem Blatt
+   von der `.txt` ab, gilt die `.txt` – Akkorde auf die gleiche Silbe setzen.
+3. **Einlesen:** `aus-ordner "<gruppe>" --ersetzen` (oder `akkorde <id> <datei>`). Ein nicht
+   gefundener Suchtext bricht mit Strophe und Suchtext ab. Zur Kontrolle das Muster je Strophe
+   ausgeben (Akkorde je Zeile, ohne Text) und mit dem Blatt vergleichen.
+
 ## Übungsstimmen (MIDI)
 
 Ein Lied kann pro Stimme eine MIDI-Datei haben. Die App zeigt dann einen Übungsplayer:

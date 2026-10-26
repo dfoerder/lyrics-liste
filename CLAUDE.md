@@ -54,12 +54,15 @@ Geräten sieht, ob die neue Version geladen ist. Mehrere Änderungen am selben T
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
 `{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
-performer, year, lyrics, updated?, scores?, voices?, link?}]}` — `lists` optional. `scores` = optionale Liste von
+performer, year, lyrics, updated?, scores?, voices?, link?, chords?, capo?}]}` — `lists` optional. `scores` = optionale Liste von
 Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
 `voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
 (`data:audio/midi;base64,…`), Reihenfolge Sopran, Alt, Tenor, Bass. Ältere App-Stände
 ignorieren das Feld, deshalb bleibt `version: 2`. `link` = optionaler https-Link zum
-Anhören (Spotify, YouTube, …), in der Liedansicht als Knopf „▶ Song spielen“; gesetzt mit
+Anhören (Spotify, YouTube, …), in der Liedansicht als Knopf „▶ Song spielen“; `chords` =
+optionale Gitarrenakkorde: derselbe Text wie `lyrics` mit ChordPro-Akkorden („Her[E]bei“),
+ohne die `[..]` genau gleich `lyrics` (sonst verworfen); deutsche (H, Fis, fis = Moll) oder
+englische Schreibweise; `capo` = Kapodaster-Bund. Den Link setzt
 `lieder.py bearbeiten <id> --link URL` (oder `hinzufuegen --link`), `--link ""` entfernt ihn. Format-Spezifikation für Claude
 steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
@@ -85,6 +88,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   (eine oder mehrere `.mid` → `.musicxml`; rückt eingespielte Töne aufs Raster 1/12 Viertel,
   schließt Artikulationslücken, Triolen/Taktwechsel/Akkorde; `write_score` gemeinsam). `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
   rendert kleine Seiten mit mindestens 1100 px Breite.
+- **Gitarrenakkorde:** `name.akkorde` neben der `.txt` (Muster vom Akkordblatt: je Strophe
+  `Suchtext=Akkord` der Reihe nach, `kapo: N`; Liedtext wird nie abgetippt) → `aus-ordner` setzt
+  `chords`; für vorhandene Lieder `lieder.py akkorde <id> <datei>` / `--entfernen`. Ändert sich der
+  Text, fallen die Akkorde weg (Hinweis).
 - `lieder.py uebernehmen <datei> [--alle | --id …] [--liste …]` — Datei aus der App (von der
   Familie weitergegeben) mit der Sammlung vergleichen: NEU/GEÄNDERT anzeigen (ohne Texte) und
   auf Wunsch übernehmen.
@@ -114,6 +121,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `prefers-color-scheme`), `hell` oder `dunkel` (Menü ⋯ auf der Startseite). Ein kleines Skript
   im `<head>` setzt `data-theme` vor dem ersten Zeichnen. Farben nur über die CSS-Variablen in
   `:root` (dunkle Werte in `@media screen`), der Druck bleibt immer hell; Noten bleiben weiß.
+- `localStorage` `lyrics-akkorde-zeigen` (Akkord-Ansicht an/aus, für alle Lieder) und
+  `lyrics-transponieren` (`{id: Halbtöne}`, je Lied gemerkt).
 - `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
@@ -171,6 +180,11 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   ohne Interpret (Choräle) stattdessen „Songwriter · Jahr“ in einer Zeile ohne Beschriftung;
   „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
   herausnehmen, neue Liste mit dem Lied anlegen)
+- `ChordSheet` — Akkord-Ansicht (🎸 in den Noten-Knöpfen und im Menü ⋯, nur bei `chords`):
+  Akkorde über der Silbe, Wörter brechen nie mittendrin; Leiste mit Tonart (aus dem ersten
+  Akkord), Kapo, −/+ Halbton, „zurück“. `transposeChord` kennt deutsche und englische Namen und
+  wählt ♭/♯ nach der Ziel-Tonart. Druck und Suche nutzen weiter `lyrics`. Der Editor verwirft
+  `chords`, wenn der Text geändert wird (mit Warnung).
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
 
