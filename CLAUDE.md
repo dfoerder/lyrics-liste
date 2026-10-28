@@ -128,7 +128,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   im `<head>` setzt `data-theme` vor dem ersten Zeichnen. Farben nur über die CSS-Variablen in
   `:root` (dunkle Werte in `@media screen`), der Druck bleibt immer hell; Noten bleiben weiß.
 - `localStorage` `lyrics-akkorde-zeigen` (Akkord-Ansicht an/aus, für alle Lieder) und
-  `lyrics-transponieren` (`{id: Halbtöne}`, je Lied gemerkt).
+  `lyrics-tonart` (`{id: Grundton 0–11}`, gewählte Zieltonart je Lied; fehlt = Original).
 - `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
@@ -191,9 +191,14 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   „▶ Song spielen“ öffnet `song.link` (falls vorhanden); „Zu Liste hinzufügen" öffnet `ListChooser` (Lied in eigene Listen legen/
   herausnehmen, neue Liste mit dem Lied anlegen)
 - `ChordSheet` — Akkord-Ansicht (🎸 in den Noten-Knöpfen und im Menü ⋯, nur bei `chords`):
-  Akkorde über der Silbe, Wörter brechen nie mittendrin; Leiste mit Tonart (aus dem ersten
-  Akkord), Kapo, −/+ Halbton, „zurück“. `transposeChord` kennt deutsche und englische Namen und
-  wählt ♭/♯ nach der Ziel-Tonart. Druck und Suche nutzen weiter `lyrics`. Der Editor verwirft
+  Akkorde über der Silbe, Wörter brechen nie mittendrin. `transposeChord` kennt deutsche und
+  englische Namen und wählt ♭/♯ nach der Ziel-Tonart.
+- `KeyBar` — gemeinsame Tonart-Leiste (sichtbar, sobald Akkorde, Übungsstimmen oder gezeichnete
+  Noten offen sind): −/+ Halbton, „Original“, „wie Akkorde“/„wie Noten“, wenn sich deren Tonarten
+  unterscheiden. Eine Zieltonart je Lied; jede Quelle rechnet ihre Verschiebung aus der eigenen
+  Tonart (`shiftTo`, −6…+5): Noten aus `<fifths>` (`xmlKey`, `transposeXml` setzt Vorzeichen und
+  Schreibweise neu), Stimmen aus dem MIDI-Tonart-Ereignis (`voicesKey`, `VoicePlayer transpose`),
+  Akkorde aus dem ersten Akkord (`chordsKey`). Das gescannte Notenbild bleibt im Original. Druck und Suche nutzen weiter `lyrics`. Der Editor verwirft
   `chords`, wenn der Text geändert wird (mit Warnung).
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
