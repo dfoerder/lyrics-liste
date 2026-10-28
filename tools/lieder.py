@@ -429,6 +429,8 @@ def cmd_hinzufuegen(args, data):
     link = pick(args.link, 'link')
     if link:
         song['link'] = check_link(link)
+    if keep.get('musicxml'):
+        song['musicxml'] = keep['musicxml']
     if keep.get('chords'):
         if strip_chords(keep['chords']) == lyrics:
             song['chords'] = keep['chords']
@@ -734,6 +736,7 @@ def cmd_uebersicht(args, data):
               + (f' | Noten: {scores_info(s)}' if s.get('scores') else '')
               + (f' | Stimmen: {voices_info(s)}' if s.get('voices') else '')
               + (f' | Akkorde: {chords_info(s)}' if s.get('chords') else '')
+              + (f' | MusicXML: {len(s["musicxml"].encode()) // 1024} KB' if s.get('musicxml') else '')
               + (' | Link' if s.get('link') else '')
               + (f' | Listen: {", ".join(lists)}' if lists else ''))
     for l in data['lists']:
@@ -1117,7 +1120,9 @@ def cmd_aus_ordner(args, data):
         song['chords'] = apply_chords(lyrics, spec)
         if capo:
             song['capo'] = capo
-    elif existing and existing.get('chords') and strip_chords(existing['chords']) == lyrics:
+    if existing and existing.get('musicxml'):
+        song['musicxml'] = existing['musicxml']
+    if not g.get('akkorde') and existing and existing.get('chords') and strip_chords(existing['chords']) == lyrics:
         song['chords'] = existing['chords']
         if existing.get('capo'):
             song['capo'] = existing['capo']
@@ -1191,6 +1196,25 @@ def cmd_akkorde(args, data):
     s['updated'] = now_stamp()
     per = [f'Str. {n}: {len(pairs) - sum(1 for _, c in pairs if not c)}' for n, pairs in sorted(spec.items())]
     print(f'Akkorde gesetzt: {song_line(s)} – {chords_info(s)} ({", ".join(per)})')
+    return True
+
+
+def cmd_musicxml(args, data):
+    """Noten als MusicXML anhängen – die App zeichnet sie dann selbst statt des Notenbilds."""
+    s = require_song(data, args.id)
+    if args.entfernen:
+        s.pop('musicxml', None)
+        print(f'MusicXML entfernt: {song_line(s)}')
+        return True
+    if not args.xml_datei:
+        raise Fehler('MusicXML-Datei angeben oder --entfernen.')
+    path = Path(args.xml_datei).expanduser()
+    xml = path.read_text(encoding='utf-8')
+    if 'score-partwise' not in xml[:2000]:
+        raise Fehler(f'{path.name} ist keine MusicXML-Partitur (score-partwise).')
+    s['musicxml'] = xml
+    print(f'MusicXML gesetzt: {song_line(s)} – {path.name}, {len(xml.encode()) // 1024} KB'
+          + (' (das Notenbild bleibt zum Vergleich)' if s.get('scores') else ''))
     return True
 
 
@@ -1357,6 +1381,11 @@ def main(argv=None):
     k2.add_argument('muster', nargs='?', metavar='DATEI')
     k2.add_argument('--entfernen', action='store_true')
 
+    x = sub.add_parser('musicxml', help='Noten als MusicXML anhängen (App zeichnet sie selbst)')
+    x.add_argument('id')
+    x.add_argument('xml_datei', nargs='?', metavar='DATEI')
+    x.add_argument('--entfernen', action='store_true')
+
     i = sub.add_parser('ignorieren', help='Dateigruppe beim Scan übergehen')
     i.add_argument('gruppe')
 
@@ -1376,7 +1405,7 @@ def main(argv=None):
         args.gruppe = unicodedata.normalize('NFC', args.gruppe)
     commands = {'hinzufuegen': cmd_hinzufuegen, 'bearbeiten': cmd_bearbeiten, 'entfernen': cmd_entfernen,
                 'liste': cmd_liste, 'noten': cmd_noten, 'stimmen': cmd_stimmen, 'scan': cmd_scan,
-                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'akkorde': cmd_akkorde, 'uebernehmen': cmd_uebernehmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
+                'aus-ordner': cmd_aus_ordner, 'verknuepfen': cmd_verknuepfen, 'ignorieren': cmd_ignorieren, 'akkorde': cmd_akkorde, 'musicxml': cmd_musicxml, 'uebernehmen': cmd_uebernehmen, 'uebersicht': cmd_uebersicht, 'vorschau': cmd_vorschau, 'export': cmd_export}
     try:
         data = load(args.datei)
         if commands[args.befehl](args, data):

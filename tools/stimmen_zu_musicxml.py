@@ -2,6 +2,8 @@
 """Stimmen-Notation (.stimmen, siehe midi_schreiben.py) als MusicXML ausgeben.
 
 Aufruf: python3 tools/stimmen_zu_musicxml.py <name>.stimmen   →  schreibt <name>.musicxml daneben
+        python3 tools/stimmen_zu_musicxml.py <name>.stimmen --chorsatz  →  <name>.chorsatz.musicxml
+        (2 Systeme wie im Gesangbuch: Sopran/Alt oben, Tenor/Bass unten – für die App)
 
 Je Stimme eine Partie (Sopran, Alt, Tenor mit oktaviertem Violinschlüssel, Bass), mit Tonart,
 Taktart und Auftakt. Dauern, die keine einfache Notenlänge sind, werden in übergebundene Noten
@@ -79,6 +81,80 @@ def midi_number(tok):
         + {'b': -1, '#': 1, None: 0}[m.group(2)]
 
 
+def emit_notes(out, bar, tied_in, voice=None, stem=None):
+    """Noten eines Takts als <note>-Elemente anhängen; gibt zurück, ob die letzte Note übergebunden ist."""
+    for toks, d, tie_next in bar:
+        pieces = split_duration(Fraction(d))
+        for k, (length, typ, dots, triplet) in enumerate(pieces):
+            ties = []
+            if toks and (tied_in or k > 0):
+                ties.append('stop')
+            if toks and (k < len(pieces) - 1 or tie_next):
+                ties.append('start')
+            tm = '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>' if triplet else ''
+            for c, tok in enumerate(toks or [None]):
+                body = ('<chord/>' if c else '') + ('<rest/>' if tok is None else pitch_xml(tok))
+                out.append('<note>' + body + f'<duration>{int(length * DIV)}</duration>'
+                           + ''.join(f'<tie type="{t}"/>' for t in ties)
+                           + (f'<voice>{voice}</voice>' if voice else '')
+                           + f'<type>{typ}</type>' + '<dot/>' * dots + tm
+                           + (f'<stem>{stem}</stem>' if stem and tok is not None else '')
+                           + (('<notations>' + ''.join(f'<tied type="{t}"/>' for t in ties) + '</notations>') if ties else '')
+                           + '</note>')
+            tied_in = False
+        tied_in = bool(toks) and tie_next
+    return tied_in
+
+
+def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False):
+    """Chorsatz wie im Gesangbuch: zwei Systeme – Sopran/Alt im Violin-, Tenor/Bass im Bassschlüssel,
+    je zwei Stimmen (Hals nach oben/unten). parts braucht Sopran, Alt, Tenor, Bass."""
+    staves = [('Sopran', 'Alt', ('G', 2)), ('Tenor', 'Bass', ('F', 4))]
+    out = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '
+           '"http://www.musicxml.org/dtds/partwise.dtd">',
+           '<score-partwise version="4.0">',
+           f'<work><work-title>{escape(title)}</work-title></work>',
+           '<part-list>']
+    for i, (a, b, _) in enumerate(staves, 1):
+        out.append(f'<score-part id="P{i}"><part-name>{a}/{b}</part-name>'
+                   f'<score-instrument id="P{i}-I1"><instrument-name>Choir Aahs</instrument-name></score-instrument>'
+                   f'<midi-instrument id="P{i}-I1"><midi-channel>{i}</midi-channel><midi-program>53</midi-program></midi-instrument>'
+                   '</score-part>')
+    out.append('</part-list>')
+    nbars = len(parts['Sopran'])
+    for i, (upper, lower, (sign, line)) in enumerate(staves, 1):
+        out.append(f'<part id="P{i}">')
+        tied = {upper: False, lower: False}
+        for b in range(nbars):
+            number = b if pickup else b + 1
+            implicit = ' implicit="yes"' if pickup and b == 0 else ''
+            out.append(f'<measure number="{number}"{implicit}>')
+            attrs = ''
+            if b == 0:
+                attrs += f'<divisions>{DIV}</divisions><key><fifths>{fifths}</fifths></key>'
+            if b == 0 or times[b] != times[b - 1]:
+                attrs += f'<time><beats>{times[b][0]}</beats><beat-type>{times[b][1]}</beat-type></time>'
+            if b == 0:
+                attrs += f'<clef><sign>{sign}</sign><line>{line}</line></clef>'
+            if attrs:
+                out.append(f'<attributes>{attrs}</attributes>')
+            if b == 0 and tempo and i == 1:
+                out.append(f'<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit>'
+                           f'<per-minute>{tempo:g}</per-minute></metronome></direction-type>'
+                           f'<sound tempo="{tempo:g}"/></direction>')
+            tied[upper] = emit_notes(out, parts[upper][b], tied[upper], 1, 'up')
+            length = sum(Fraction(d) for _, d, _ in parts[upper][b])
+            out.append(f'<backup><duration>{int(length * DIV)}</duration></backup>')
+            tied[lower] = emit_notes(out, parts[lower][b], tied[lower], 2, 'down')
+            if b == nbars - 1:
+                out.append('<barline location="right"><bar-style>light-heavy</bar-style></barline>')
+            out.append('</measure>')
+        out.append('</part>')
+    out.append('</score-partwise>')
+    Path(target).write_text('\n'.join(out) + '\n', encoding='utf-8')
+
+
 def write_score(target, title, parts, times, fifths=0, tempo=None, pickup=False):
     """parts: {Name: [Takt: [(Töne|None, Dauer in Vierteln, gebunden_zum_nächsten)]]}
     times: je Takt (Zähler, Nenner). Töne = Liste von Tonnamen wie 'F#4' (mehrere = Akkord)."""
@@ -119,24 +195,7 @@ def write_score(target, title, parts, times, fifths=0, tempo=None, pickup=False)
                 out.append(f'<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit>'
                            f'<per-minute>{tempo:g}</per-minute></metronome></direction-type>'
                            f'<sound tempo="{tempo:g}"/></direction>')
-            for toks, d, tie_next in bar:
-                pieces = split_duration(Fraction(d))
-                for k, (length, typ, dots, triplet) in enumerate(pieces):
-                    ties = []
-                    if toks and (tied_in or k > 0):
-                        ties.append('stop')
-                    if toks and (k < len(pieces) - 1 or tie_next):
-                        ties.append('start')
-                    tm = '<time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>' if triplet else ''
-                    for c, tok in enumerate(toks or [None]):
-                        body = ('<chord/>' if c else '') + ('<rest/>' if tok is None else pitch_xml(tok))
-                        out.append('<note>' + body + f'<duration>{int(length * DIV)}</duration>'
-                                   + ''.join(f'<tie type="{t}"/>' for t in ties)
-                                   + f'<type>{typ}</type>' + '<dot/>' * dots + tm
-                                   + (('<notations>' + ''.join(f'<tied type="{t}"/>' for t in ties) + '</notations>') if ties else '')
-                                   + '</note>')
-                    tied_in = False
-                tied_in = bool(toks) and tie_next
+            tied_in = emit_notes(out, bar, tied_in)
             if b == len(measures) - 1:
                 out.append('<barline location="right"><bar-style>light-heavy</bar-style></barline>')
             out.append('</measure>')
@@ -159,7 +218,7 @@ def tokens(path):
     return voices
 
 
-def main(path):
+def main(path, choral=False):
     meta, _ = parse(path)                  # prüft nebenbei die Notation
     voices = tokens(path)
     num, den = (int(x) for x in meta.get('takt', '4/4').split('/'))
@@ -168,14 +227,23 @@ def main(path):
     parts = {n: [[(None if t == '-' else [t], d, False) for t, d in bar] for bar in voices[n]] for n in names}
     nbars = len(voices[names[0]])
     pickup = sum(d for _, d in voices[names[0]][0]) < bar_len
+    args = (meta.get('titel', Path(path).stem), parts, [(num, den)] * nbars,
+            KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup)
+    if choral:
+        if set(names) != {'Sopran', 'Alt', 'Tenor', 'Bass'}:
+            raise SystemExit('Chorsatz braucht genau die Stimmen Sopran, Alt, Tenor, Bass.')
+        target = Path(path).with_suffix('.chorsatz.musicxml')
+        write_choral(target, *args)
+        print(f'{target.name}: Chorsatz (2 Systeme: Sopran/Alt, Tenor/Bass), {nbars} Takte')
+        return
     target = Path(path).with_suffix('.musicxml')
-    write_score(target, meta.get('titel', Path(path).stem), parts, [(num, den)] * nbars,
-                KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup)
+    write_score(target, *args)
     print(f'{target.name}: {len(names)} Stimmen ({", ".join(names)}), {nbars} Takte'
           + (' inkl. Auftakt' if pickup else '') + f', {num}/{den}, Tonart {meta.get("tonart", "C")}')
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    argv = [a for a in sys.argv[1:] if a != '--chorsatz']
+    if len(argv) != 1:
         raise SystemExit(__doc__)
-    main(sys.argv[1])
+    main(argv[0], choral='--chorsatz' in sys.argv)

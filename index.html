@@ -181,6 +181,8 @@ a.btn{display:inline-block;text-decoration:none}
 .chord-view .ct{white-space:pre}
 .chord-bar{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;font-size:.85rem;color:var(--text2);margin:0 0 .8rem}
 .chord-bar .size-btn{width:2rem;height:2rem;border:1px solid var(--border2)}
+.mxl-score{background:#fff;border:1px solid var(--border);border-radius:.4rem;margin-bottom:.6rem;overflow:hidden;padding:2.4rem 0 .2rem}
+.mxl-switch{font-size:.78rem;color:var(--muted);margin:-.2rem 0 .8rem;text-decoration:underline;cursor:pointer;background:none;border:none;padding:0}
 .edited-note{font-size:.78rem;color:var(--muted);margin:-.6rem 0 1rem}
 .hint{font-size:.8rem;color:var(--muted);margin:.2rem 0 .8rem .2rem}
 
@@ -308,7 +310,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-26';
+const APP_VERSION = '2026-10-28';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -527,6 +529,7 @@ function parseCollection(text){
     if(voices.length) songs[id].voices = voices;
     if(/^https:\/\/\S+$/.test(str(s.link))) songs[id].link = str(s.link);
     if(str(s.updated) && !isNaN(Date.parse(str(s.updated)))) songs[id].updated = str(s.updated);
+    if(typeof s.musicxml==='string' && /<score-partwise/.test(s.musicxml.slice(0,3000))) songs[id].musicxml = s.musicxml;
     if(str(s.chords) && cleanLyrics(stripChords(str(s.chords))) === songs[id].lyrics){
       songs[id].chords = str(s.chords).replace(/\r\n/g,'\n');
       const capo = parseInt(s.capo, 10);
@@ -1281,6 +1284,49 @@ function SongMeta({song}){
 
 const SECTION_LABEL = /^(strophe|vers|verse|refrain|chorus|pre-?chorus|bridge|intro|outro|tag|ende|schluss|coda|zwischenteil|interlude)(\s*\d+)?(\s*\([^)]*\))?\s*:?$/i;
 
+// ---------- Noten aus MusicXML selbst zeichnen (OpenSheetMusicDisplay, nur bei Bedarf geladen;
+// der Service Worker hält die Bibliothek danach für offline bereit)
+const OSMD_URL = 'https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.9/build/opensheetmusicdisplay.min.js';
+let osmdPromise = null;
+function loadOsmd(){
+  if(window.opensheetmusicdisplay) return Promise.resolve(window.opensheetmusicdisplay);
+  if(!osmdPromise) osmdPromise = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = OSMD_URL;
+    s.crossOrigin = 'anonymous';
+    s.onload = ()=>resolve(window.opensheetmusicdisplay);
+    s.onerror = ()=>{ osmdPromise = null; reject(new Error('Notenanzeige konnte nicht geladen werden – beim ersten Mal braucht das Internet.')); };
+    document.head.appendChild(s);
+  });
+  return osmdPromise;
+}
+function MusicXmlScore({xml, onFail}){
+  const ref = useRef(null);
+  const [state,setState] = useState('loading');
+  useEffect(()=>{
+    let cancelled = false, osmd = null;
+    loadOsmd().then(async lib=>{
+      if(cancelled || !ref.current) return;
+      osmd = new lib.OpenSheetMusicDisplay(ref.current, {
+        backend: 'svg', autoResize: true, drawTitle: false, drawSubtitle: false, drawComposer: false,
+        drawLyricist: false, drawPartNames: false, drawMeasureNumbers: false, drawingParameters: 'compacttight'
+      });
+      await osmd.load(xml);
+      if(cancelled) return;
+      osmd.zoom = window.innerWidth < 600 ? 0.62 : 0.85;
+      osmd.render();
+      setState('ok');
+    }).catch(e=>{ if(!cancelled){ setState('error'); onFail && onFail(e.message || String(e)); } });
+    return ()=>{ cancelled = true; try{ osmd && osmd.clear(); }catch(e){} };
+  }, [xml]);
+  return (
+    <div className="mxl-score">
+      {state==='loading' && <div className="hint" style={{padding:'1rem'}}>Noten werden gezeichnet …</div>}
+      <div ref={ref} />
+    </div>
+  );
+}
+
 function Scores({scores, onOpen}){
   if(!scores || !scores.length) return null;
   return (
@@ -1859,7 +1905,10 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
     try{ localStorage.setItem(LS_SHOW_SCORES, JSON.stringify(v)); }catch(e){}
   }
   const hasVoices = !!(song.voices && song.voices.length);
-  const hasScores = !!(song.scores && song.scores.length);
+  const hasMxl = !!song.musicxml;
+  const [useImage,setUseImage] = useState(false);
+  const [mxlError,setMxlError] = useState('');
+  const hasScores = !!(song.scores && song.scores.length) || hasMxl;
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
   if(editing){
     return <SongEditor song={song} onCancel={()=>setEditing(false)} onDelete={onDeleteSong}
@@ -1898,7 +1947,13 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
         {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} />}
         {scoresVisible && hasScores && <div className="scores-wrap" style={{position:'relative'}}>
           <button className="scores-close no-print" title="Noten ausblenden" aria-label="Noten ausblenden" onClick={toggleScores}>✕</button>
-          <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />
+          {hasMxl && !useImage && !mxlError
+            ? <MusicXmlScore xml={song.musicxml} onFail={setMxlError} />
+            : <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />}
+          {mxlError && <div className="hint" style={{color:'var(--danger)'}}>{mxlError} Es wird das Notenbild gezeigt.</div>}
+          {hasMxl && song.scores && song.scores.length>0 && !mxlError &&
+            <button className="mxl-switch no-print" onClick={()=>setUseImage(!useImage)}>
+              {useImage ? 'Gezeichnete Noten zeigen' : 'Original-Notenblatt zeigen'}</button>}
         </div>}
         {hasChords && chordsVisible && <div className="chord-bar no-print">
           <span>🎸 {key ? key.label : ''}{song.capo ? ` · Kapo ${song.capo}` : ''}</span>

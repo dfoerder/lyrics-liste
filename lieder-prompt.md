@@ -77,6 +77,7 @@ FELDER:
   Text oder geänderten Angaben neu setzen, sonst unverändert lassen.
 - chords / capo: optional, Gitarrenakkorde – nur über tools/lieder.py (Muster-Datei .akkorde),
   bestehende Werte unverändert übernehmen.
+- musicxml: optional, Partitur als MusicXML-Text – nur über tools/lieder.py, unverändert übernehmen.
 - link: optional, https-Link zum Anhören der Version (Spotify, YouTube, …). Nur vom Nutzer
   übernehmen, nicht selbst suchen oder raten. Die App zeigt dafür „▶ Song spielen“.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds

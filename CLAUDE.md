@@ -48,13 +48,14 @@ Geräten sieht, ob die neue Version geladen ist. Mehrere Änderungen am selben T
 **Offline / PWA:**
 - `sw.js` — Service Worker. Cacht App-Shell und die CDN-Bibliotheken beim Install.
   Eigene Dateien: Netz zuerst, offline aus dem Cache. CDN: Cache zuerst.
-  **Wenn die CDN-Versionen in `index.html` geändert werden:** `CDN_ASSETS` in
-  `sw.js` anpassen und `CACHE` hochzählen (`lyrics-liste-v2`, …).
+  **Wenn die CDN-Versionen in `index.html` geändert werden:** `CDN_ASSETS` (beim Install
+  geladen) bzw. `LAZY_ASSETS` (erst bei Bedarf, z.B. Notenanzeige, PDF-Leser) in `sw.js`
+  anpassen und `CACHE` hochzählen (zurzeit `lyrics-liste-v2`).
 - `manifest.webmanifest` + `icons/` — Installierbarkeit (Homescreen)
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
 `{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
-performer, year, lyrics, updated?, scores?, voices?, link?, chords?, capo?}]}` — `lists` optional. `scores` = optionale Liste von
+performer, year, lyrics, updated?, scores?, voices?, link?, chords?, capo?, musicxml?}]}` — `lists` optional. `scores` = optionale Liste von
 Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
 `voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
 (`data:audio/midi;base64,…`), Reihenfolge Sopran, Alt, Tenor, Bass. Ältere App-Stände
@@ -62,7 +63,8 @@ ignorieren das Feld, deshalb bleibt `version: 2`. `link` = optionaler https-Link
 Anhören (Spotify, YouTube, …), in der Liedansicht als Knopf „▶ Song spielen“; `chords` =
 optionale Gitarrenakkorde: derselbe Text wie `lyrics` mit ChordPro-Akkorden („Her[E]bei“),
 ohne die `[..]` genau gleich `lyrics` (sonst verworfen); deutsche (H, Fis, fis = Moll) oder
-englische Schreibweise; `capo` = Kapodaster-Bund. Den Link setzt
+englische Schreibweise; `capo` = Kapodaster-Bund; `musicxml` = optionale Partitur als
+MusicXML-Text (Probelauf: die App zeichnet sie statt des Notenbilds, `MusicXmlScore`). Den Link setzt
 `lieder.py bearbeiten <id> --link URL` (oder `hinzufuegen --link`), `--link ""` entfernt ihn. Format-Spezifikation für Claude
 steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 
@@ -88,6 +90,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   (eine oder mehrere `.mid` → `.musicxml`; rückt eingespielte Töne aufs Raster 1/12 Viertel,
   schließt Artikulationslücken, Triolen/Taktwechsel/Akkorde; `write_score` gemeinsam). `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
   rendert kleine Seiten mit mindestens 1100 px Breite.
+- **MusicXML in der App (Probelauf):** `stimmen_zu_musicxml.py <name>.stimmen --chorsatz` schreibt
+  `<name>.chorsatz.musicxml` (2 Systeme: Sopran/Alt, Tenor/Bass, wie im Gesangbuch);
+  `lieder.py musicxml <id> <datei>` / `--entfernen` hängt sie an (bleibt beim Neu-Einlesen
+  erhalten). Bisher nur „Herbei, o ihr Gläubgen“.
 - **Gitarrenakkorde:** `name.akkorde` neben der `.txt` (Muster vom Akkordblatt: je Strophe
   `Suchtext=Akkord` der Reihe nach, `kapo: N`; Liedtext wird nie abgetippt) → `aus-ordner` setzt
   `chords`; für vorhandene Lieder `lieder.py akkorde <id> <datei>` / `--entfernen`. Ändert sich der
@@ -150,6 +156,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `<audio>` im Hintergrund (`setSilentAudio`).
 - `Scores` / `ScoreViewer` — Notenbilder über dem Text; Antippen öffnet Vollbild mit
   Zoomstufen
+- `MusicXmlScore` — zeichnet `song.musicxml` mit OpenSheetMusicDisplay 1.8.9 (jsDelivr, erst bei
+  Bedarf geladen, `sw.js` `LAZY_ASSETS` speichert sie dann für offline; ebenso pdf.js); weißer
+  Hintergrund auch im Dunkelmodus; Umschalter „Original-Notenblatt zeigen“, wenn es auch `scores`
+  gibt; bei Fehler Rückfall aufs Notenbild
 - `SongEditor` — „✎ Bearbeiten“ im Lied und „+ Neues Lied“ (Alle Lieder, leere Startseite;
   `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text, Link (https), Noten hochladen (PDF
   über pdf.js 3.11.174 von cdnjs, nur bei Bedarf geladen – braucht dann Internet; Seiten als

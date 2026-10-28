@@ -1,6 +1,6 @@
 // Service Worker: macht die App offline nutzbar.
 // Bei Änderung der CDN-Versionen in index.html: CDN_ASSETS anpassen und CACHE hochzählen.
-const CACHE = 'lyrics-liste-v1';
+const CACHE = 'lyrics-liste-v2';
 
 const APP_SHELL = [
   './',
@@ -14,6 +14,14 @@ const CDN_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js'
+];
+
+// Erst bei Bedarf geladene Bibliotheken (Notenanzeige, PDF-Leser): beim ersten Abruf gespeichert,
+// danach aus dem Cache – auch offline
+const LAZY_ASSETS = [
+  'https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.9/build/opensheetmusicdisplay.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 ];
 
 self.addEventListener('install', event=>{
@@ -39,7 +47,7 @@ self.addEventListener('fetch', event=>{
   const url = new URL(req.url);
 
   // CDN-Bibliotheken: versionierte URLs, ändern sich nie → Cache zuerst
-  if(CDN_ASSETS.includes(url.href)){
+  if(CDN_ASSETS.includes(url.href) || LAZY_ASSETS.includes(url.href)){
     event.respondWith(caches.match(req).then(hit=>hit || fetchAndCache(req)));
     return;
   }
@@ -62,7 +70,7 @@ self.addEventListener('fetch', event=>{
 
 async function fetchAndCache(req){
   const res = await fetch(req);
-  if(res.ok && !res.redirected){
+  if((res.ok || res.type==='opaque') && !res.redirected){
     const cache = await caches.open(CACHE);
     cache.put(req, res.clone());
   }
