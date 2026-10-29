@@ -93,7 +93,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - **MusicXML in der App (Probelauf):** `stimmen_zu_musicxml.py <name>.stimmen --chorsatz` schreibt
   `<name>.chorsatz.musicxml` (2 Systeme: Sopran/Alt, Tenor/Bass, wie im Gesangbuch);
   `lieder.py musicxml <id> <datei>` / `--entfernen` hängt sie an (bleibt beim Neu-Einlesen
-  erhalten). Bisher nur „Herbei, o ihr Gläubgen“.
+  erhalten). Bisher „Herbei, o ihr Gläubgen“, „Stille Nacht“ und „O du fröhliche“.
 - **Gitarrenakkorde:** `name.akkorde` neben der `.txt` (Muster vom Akkordblatt: je Strophe
   `Suchtext=Akkord` der Reihe nach, `kapo: N`; Liedtext wird nie abgetippt) → `aus-ordner` setzt
   `chords`; für vorhandene Lieder `lieder.py akkorde <id> <datei>` / `--entfernen`. Ändert sich der
