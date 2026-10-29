@@ -310,7 +310,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-28-2';
+const APP_VERSION = '2026-10-29';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1431,9 +1431,96 @@ function shiftTo(from, targetPc){
 // MusicXML um shift Halbtöne transponieren: Tonart und jede Note, mit passender Schreibweise
 const XML_LETTERS = ['C','D','E','F','G','A','B'], XML_NAT = [0,2,4,5,7,9,11];
 const MAJOR_TONIC_LETTER = {'-6':4,'-5':1,'-4':5,'-3':2,'-2':6,'-1':3,'0':0,'1':4,'2':1,'3':5,'4':2,'5':6,'6':3};
+// Bass in singbarer Lage: Durch Transponieren rutscht die tiefste Stimme oft unter F2. Solche Stellen
+// kommen eine Oktave höher – ganze Abschnitte statt einzelner Töne (kleinste Sprünge, nicht über den
+// Tenor). Geht schon das Original tiefer, gilt dessen tiefster Ton als Grenze.
+const BASS_FLOOR = 41;   // F2
+// lines: [{notes:[{midi, beat, dur, join}]}] in Originalhöhe (join = gehört zum vorigen Ton: Haltebogen/Akkord)
+// → {line: Index der Bassstimme, lift: [true/false je Ton]} oder null, wenn nichts zu tun ist
+function liftBass(lines, shift){
+  if(!shift) return null;
+  const sung = lines.map((l,i)=>({i, notes: l.notes, avg: l.notes.reduce((s,n)=>s+n.midi,0)/(l.notes.length||1)}))
+    .filter(l=>l.notes.length).sort((a,b)=>a.avg-b.avg);
+  if(sung.length < 2) return null;
+  const bass = sung[0].notes, upper = sung[1].notes;
+  const floor = Math.min(BASS_FLOOR, ...bass.map(n=>n.midi));
+  const p = bass.map(n=>n.midi + shift);
+  if(p.every(x=>x>=floor)) return null;
+  const above = bass.map(n=>{
+    let m = Infinity;
+    upper.forEach(u=>{ if(u.beat < n.beat+n.dur-1e-6 && u.beat+u.dur > n.beat+1e-6) m = Math.min(m, u.midi+shift); });
+    return m;
+  });
+  const node = (i,s)=> s ? 1 + (p[i]+12 > above[i] ? 20 : 0) + (p[i]+12 > 62 ? 50 : 0) : (p[i] < floor ? Infinity : 0);
+  const edge = (i,a,b)=>{
+    if(a===b) return 0;
+    if(bass[i].join) return Infinity;
+    const prev = bass[i-1], rest = bass[i].beat > prev.beat + prev.dur + 1e-6;
+    const leap = Math.abs(p[i] - p[i-1] + 12*(b-a));
+    return (rest ? 2 : 4) + Math.max(0, leap-7) + (leap > 12 ? 20 : 0);
+  };
+  let cost = [node(0,0), node(0,1)];
+  const from = [[0,0]];
+  for(let i=1; i<p.length; i++){
+    const next = [0,1].map(b=>{
+      const c0 = cost[0]+edge(i,0,b), c1 = cost[1]+edge(i,1,b);
+      return c0 <= c1 ? [c0 + node(i,b), 0] : [c1 + node(i,b), 1];
+    });
+    from.push(next.map(x=>x[1]));
+    cost = next.map(x=>x[0]);
+  }
+  const lift = new Array(p.length);
+  let s = cost[1] < cost[0] ? 1 : 0;
+  for(let i=p.length-1; i>=0; i--){ lift[i] = s===1; s = from[i][s]; }
+  return lift.some(Boolean) ? {line: sung[0].i, lift} : null;
+}
+// Stimmen einer MusicXML-Partitur (je Partie und <voice>) mit Takt-Position, für liftBass
+function xmlLines(doc){
+  const lines = {}, order = [];
+  doc.querySelectorAll('part').forEach(part=>{
+    let start = 0, divisions = 1;
+    part.querySelectorAll(':scope > measure').forEach(measure=>{
+      let pos = 0, len = 0, last = 0;
+      Array.from(measure.children).forEach(el=>{
+        if(el.tagName==='attributes'){ const d = el.querySelector('divisions'); if(d) divisions = parseInt(d.textContent,10) || divisions; }
+        else if(el.tagName==='backup') pos -= parseInt(el.querySelector('duration').textContent,10);
+        else if(el.tagName==='forward') pos += parseInt(el.querySelector('duration').textContent,10);
+        else if(el.tagName==='note'){
+          if(el.querySelector('grace')) return;
+          const durEl = el.querySelector('duration'), dur = durEl ? parseInt(durEl.textContent,10) : 0;
+          const chord = !!el.querySelector('chord'), at = chord ? last : pos;
+          if(!chord){ last = pos; pos += dur; }
+          len = Math.max(len, pos);
+          const pitch = el.querySelector('pitch');
+          if(!pitch) return;
+          const key = part.id + '/' + ((el.querySelector('voice')||{}).textContent || '1');
+          if(!lines[key]){ lines[key] = {notes: [], els: []}; order.push(key); }
+          const L = XML_LETTERS.indexOf(pitch.querySelector('step').textContent);
+          const alter = pitch.querySelector('alter');
+          lines[key].notes.push({midi: 12*(parseInt(pitch.querySelector('octave').textContent,10)+1) + XML_NAT[L] + (alter ? parseInt(alter.textContent,10) : 0),
+            beat: start + at/divisions, dur: dur/divisions, join: chord || !!el.querySelector('tie[type="stop"]')});
+          lines[key].els.push(pitch);
+        }
+      });
+      start += len/divisions;
+    });
+  });
+  return order.map(k=>lines[k]);
+}
+function xmlBassLift(xml, shift){
+  if(!shift || !xml) return null;
+  try{ return liftBass(xmlLines(new DOMParser().parseFromString(xml, 'application/xml')), shift); }catch(e){ return null; }
+}
+function voicesBassLift(voices, shift){
+  if(!shift || !voices || !voices.length) return null;
+  return liftBass(parsedVoices(voices).map(t=>({notes: t.notes.map((n,k)=>({...n, join: k>0 && Math.abs(n.beat - t.notes[k-1].beat) < 1e-6}))})), shift);
+}
+
 function transposeXml(xml, shift){
   if(!shift) return xml;
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const lines = xmlLines(doc), bassLift = liftBass(lines, shift);
+  const lifted = new Set(bassLift ? lines[bassLift.line].els.filter((_,k)=>bassLift.lift[k]) : []);
   const keyEl = doc.querySelector('key fifths');
   const oldF = keyEl ? parseInt(keyEl.textContent,10) : 0;
   let newF = ((oldF + 7*shift) % 12 + 12) % 12; if(newF > 6) newF -= 12;
@@ -1448,7 +1535,7 @@ function transposeXml(xml, shift){
     const midi = 12*(o+1) + XML_NAT[L] + a + shift;
     const abs = o*7 + L + d, nL = ((abs % 7) + 7) % 7, nO = Math.floor(abs / 7);
     const nA = midi - (12*(nO+1) + XML_NAT[nL]);
-    step.textContent = XML_LETTERS[nL]; oct.textContent = String(nO);
+    step.textContent = XML_LETTERS[nL]; oct.textContent = String(nO + (lifted.has(p) ? 1 : 0));
     if(nA){ if(!alterEl){ alterEl = doc.createElement('alter'); p.insertBefore(alterEl, oct); } alterEl.textContent = String(nA); }
     else if(alterEl) alterEl.remove();
   });
@@ -1692,7 +1779,8 @@ function VoicePlayer({voices, transpose=0}){
   const [pos,setPos] = useState(0);                // Position in Schlägen
   const eng = useRef(null);
   const settings = useRef({});
-  settings.current = {focus, others, tempo, loop, transpose};
+  const bassLift = useMemo(()=>voicesBassLift(voices, transpose), [voices, transpose]);
+  settings.current = {focus, others, tempo, loop, transpose, bassLift};
 
   const total = tracks.length ? Math.max(...tracks.map(t=>t.length)) : 0;
   const baseBpm = tracks.length ? tracks[0].bpm : 100;
@@ -1735,9 +1823,9 @@ function VoicePlayer({voices, transpose=0}){
       const horizon=nowBeat+2;
       tracks.forEach((t,ti)=>{
         while(e.next[ti]<t.notes.length && t.notes[e.next[ti]].beat<horizon){
-          const n=t.notes[e.next[ti]++];
+          const k=e.next[ti]++, n=t.notes[k], bl=settings.current.bassLift;
           const t0=e.startTime+(n.beat-e.startBeat)*e.spb;
-          playTone(ctx, gains[ti], n.midi + settings.current.transpose, Math.max(t0, ctx.currentTime), Math.max(0.08, n.dur*e.spb-0.03), e.nodes);
+          playTone(ctx, gains[ti], n.midi + settings.current.transpose + (bl && bl.line===ti && bl.lift[k] ? 12 : 0), Math.max(t0, ctx.currentTime), Math.max(0.08, n.dur*e.spb-0.03), e.nodes);
         }
       });
       if(nowBeat>=total+0.2){
@@ -1924,7 +2012,7 @@ function ActionMenu({items}){
 }
 
 // Tonart-Leiste: Zieltonart wählen; Noten, Übungsstimmen und Akkorde folgen gemeinsam
-function KeyBar({target, refKey, keys, capo, onStep, onSet, imageShown}){
+function KeyBar({target, refKey, keys, capo, onStep, onSet, imageShown, bassLifted}){
   const shown = target===null ? refKey : {pc: target, minor: refKey.minor};
   const differ = keys.chords && (keys.notes || keys.voices) && keys.chords.pc !== (keys.notes || keys.voices).pc;
   const chip = (label, key)=> key && target!==key.pc &&
@@ -1942,6 +2030,7 @@ function KeyBar({target, refKey, keys, capo, onStep, onSet, imageShown}){
       {differ && chip('wie Akkorde', keys.chords)}
       {differ && chip('wie Noten', keys.notes || keys.voices)}
       {imageShown && <span style={{width:'100%',fontSize:'.75rem',color:'var(--muted)'}}>Das Notenbild bleibt in der Originaltonart.</span>}
+      {bassLifted && <span style={{width:'100%',fontSize:'.75rem',color:'var(--muted)'}}>Bass stellenweise eine Oktave höher, damit er nicht unter F2 fällt.</span>}
     </div>
   );
 }
@@ -1985,6 +2074,8 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
   function stepKey(d){ saveTarget((((target===null ? refKey.pc : target) + d) % 12 + 12) % 12); }
   const [useImage,setUseImage] = useState(false);
   const [mxlError,setMxlError] = useState('');
+  const bassLifted = useMemo(()=>!!((hasMxl && scoresVisible && !useImage && xmlBassLift(song.musicxml, shiftNotes))
+    || (practice && hasVoices && voicesBassLift(song.voices, shiftVoices))), [song, shiftNotes, shiftVoices, scoresVisible, useImage, practice]);
   const hasScores = !!(song.scores && song.scores.length) || hasMxl;
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
   if(editing){
@@ -2023,7 +2114,7 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
         </div>}
         {refKey && ((hasChords && chordsVisible) || (practice && hasVoices) || (hasMxl && scoresVisible && !useImage) || target!==null) &&
           <KeyBar target={target} refKey={refKey} keys={keys} capo={hasChords && chordsVisible ? song.capo : 0}
-            onStep={stepKey} onSet={saveTarget}
+            onStep={stepKey} onSet={saveTarget} bassLifted={bassLifted}
             imageShown={target!==null && scoresVisible && (!hasMxl || useImage) && song.scores && song.scores.length>0} />}
         {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} transpose={shiftVoices} />}
         {scoresVisible && hasScores && <div className="scores-wrap" style={{position:'relative'}}>

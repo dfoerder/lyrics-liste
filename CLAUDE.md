@@ -198,7 +198,11 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   unterscheiden. Eine Zieltonart je Lied; jede Quelle rechnet ihre Verschiebung aus der eigenen
   Tonart (`shiftTo`, −6…+5): Noten aus `<fifths>` (`xmlKey`, `transposeXml` setzt Vorzeichen und
   Schreibweise neu), Stimmen aus dem MIDI-Tonart-Ereignis (`voicesKey`, `VoicePlayer transpose`),
-  Akkorde aus dem ersten Akkord (`chordsKey`). Das gescannte Notenbild bleibt im Original. Druck und Suche nutzen weiter `lyrics`. Der Editor verwirft
+  Akkorde aus dem ersten Akkord (`chordsKey`). Das gescannte Notenbild bleibt im Original.
+  Bass-Lage: `liftBass` (für Noten über `xmlLines`, für Stimmen über `voicesBassLift`) hebt die
+  tiefste Stimme abschnittsweise um eine Oktave, wo sie durchs Transponieren unter F2
+  (`BASS_FLOOR`, oder den tiefsten Ton des Originals) fiele; kleinste Sprünge, möglichst nicht über
+  die nächsthöhere Stimme; Hinweis in der Leiste. Druck und Suche nutzen weiter `lyrics`. Der Editor verwirft
   `chords`, wenn der Text geändert wird (mit Warnung).
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
