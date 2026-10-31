@@ -91,9 +91,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   schließt Artikulationslücken, Triolen/Taktwechsel/Akkorde; `write_score` gemeinsam). `pdf_seiten.swift` beachtet Seitendrehung und CropBox und
   rendert kleine Seiten mit mindestens 1100 px Breite.
 - **MusicXML in der App (Probelauf):** `stimmen_zu_musicxml.py <name>.stimmen --chorsatz` schreibt
-  `<name>.chorsatz.musicxml` (2 Systeme: Sopran/Alt, Tenor/Bass, wie im Gesangbuch);
+  `<name>.chorsatz.musicxml` (2 Systeme: Sopran/Alt, Tenor/Bass, wie im Gesangbuch; dreistimmig ohne
+  Tenor: Bass allein unten);
   `lieder.py musicxml <id> <datei>` / `--entfernen` hängt sie an (bleibt beim Neu-Einlesen
-  erhalten). Bisher „Herbei, o ihr Gläubgen“, „Stille Nacht“ und „O du fröhliche“.
+  erhalten). Bisher „Herbei, o ihr Gläubgen“, „Stille Nacht“, „O du fröhliche“, „Feliz Navidad“ und „Kommet, ihr Hirten“ (dreistimmig).
 - **Gitarrenakkorde:** `name.akkorde` neben der `.txt` (Muster vom Akkordblatt: je Strophe
   `Suchtext=Akkord` der Reihe nach, `kapo: N`; Liedtext wird nie abgetippt) → `aus-ordner` setzt
   `chords`; für vorhandene Lieder `lieder.py akkorde <id> <datei>` / `--entfernen`. Ändert sich der

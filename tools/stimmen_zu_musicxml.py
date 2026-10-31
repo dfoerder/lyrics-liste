@@ -108,8 +108,9 @@ def emit_notes(out, bar, tied_in, voice=None, stem=None):
 
 def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False):
     """Chorsatz wie im Gesangbuch: zwei Systeme – Sopran/Alt im Violin-, Tenor/Bass im Bassschlüssel,
-    je zwei Stimmen (Hals nach oben/unten). parts braucht Sopran, Alt, Tenor, Bass."""
-    staves = [('Sopran', 'Alt', ('G', 2)), ('Tenor', 'Bass', ('F', 4))]
+    je zwei Stimmen (Hals nach oben/unten). parts braucht Sopran, Alt, Bass und meist Tenor; ohne Tenor
+    (dreistimmiger Satz) steht der Bass allein im unteren System."""
+    staves = [('Sopran', 'Alt', ('G', 2)), ('Tenor' if 'Tenor' in parts else None, 'Bass', ('F', 4))]
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '
            '"http://www.musicxml.org/dtds/partwise.dtd">',
@@ -117,7 +118,7 @@ def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False
            f'<work><work-title>{escape(title)}</work-title></work>',
            '<part-list>']
     for i, (a, b, _) in enumerate(staves, 1):
-        out.append(f'<score-part id="P{i}"><part-name>{a}/{b}</part-name>'
+        out.append(f'<score-part id="P{i}"><part-name>{f"{a}/{b}" if a else b}</part-name>'
                    f'<score-instrument id="P{i}-I1"><instrument-name>Choir Aahs</instrument-name></score-instrument>'
                    f'<midi-instrument id="P{i}-I1"><midi-channel>{i}</midi-channel><midi-program>53</midi-program></midi-instrument>'
                    '</score-part>')
@@ -143,10 +144,13 @@ def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False
                 out.append(f'<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit>'
                            f'<per-minute>{tempo:g}</per-minute></metronome></direction-type>'
                            f'<sound tempo="{tempo:g}"/></direction>')
-            tied[upper] = emit_notes(out, parts[upper][b], tied[upper], 1, 'up')
-            length = sum(Fraction(d) for _, d, _ in parts[upper][b])
-            out.append(f'<backup><duration>{int(length * DIV)}</duration></backup>')
-            tied[lower] = emit_notes(out, parts[lower][b], tied[lower], 2, 'down')
+            if upper:
+                tied[upper] = emit_notes(out, parts[upper][b], tied[upper], 1, 'up')
+                length = sum(Fraction(d) for _, d, _ in parts[upper][b])
+                out.append(f'<backup><duration>{int(length * DIV)}</duration></backup>')
+                tied[lower] = emit_notes(out, parts[lower][b], tied[lower], 2, 'down')
+            else:
+                tied[lower] = emit_notes(out, parts[lower][b], tied[lower], 1)
             if b == nbars - 1:
                 out.append('<barline location="right"><bar-style>light-heavy</bar-style></barline>')
             out.append('</measure>')
@@ -230,11 +234,11 @@ def main(path, choral=False):
     args = (meta.get('titel', Path(path).stem), parts, [(num, den)] * nbars,
             KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup)
     if choral:
-        if set(names) != {'Sopran', 'Alt', 'Tenor', 'Bass'}:
-            raise SystemExit('Chorsatz braucht genau die Stimmen Sopran, Alt, Tenor, Bass.')
+        if set(names) not in ({'Sopran', 'Alt', 'Tenor', 'Bass'}, {'Sopran', 'Alt', 'Bass'}):
+            raise SystemExit('Chorsatz braucht die Stimmen Sopran, Alt, Tenor, Bass (oder Sopran, Alt, Bass).')
         target = Path(path).with_suffix('.chorsatz.musicxml')
         write_choral(target, *args)
-        print(f'{target.name}: Chorsatz (2 Systeme: Sopran/Alt, Tenor/Bass), {nbars} Takte')
+        print(f'{target.name}: Chorsatz (2 Systeme: Sopran/Alt, {"Tenor/Bass" if "Tenor" in names else "Bass"}), {nbars} Takte')
         return
     target = Path(path).with_suffix('.musicxml')
     write_score(target, *args)
