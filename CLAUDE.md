@@ -94,7 +94,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `<name>.chorsatz.musicxml` (2 Systeme: Sopran/Alt, Tenor/Bass, wie im Gesangbuch; dreistimmig ohne
   Tenor: Bass allein unten);
   `lieder.py musicxml <id> <datei>` / `--entfernen` hängt sie an (bleibt beim Neu-Einlesen
-  erhalten). Bisher „Herbei, o ihr Gläubgen“, „Stille Nacht“, „O du fröhliche“, „Feliz Navidad“ und „Kommet, ihr Hirten“ (dreistimmig).
+  erhalten). Bisher die Weihnachtslieder (`privat/data/weihnachtslieder/*.chorsatz.musicxml`); bei „Amazing grace“ und
+  „Stern über Bethlehem“ ist der Satz selbst geschrieben (nur die Melodie stammt aus den Noten).
 - **Gitarrenakkorde:** `name.akkorde` neben der `.txt` (Muster vom Akkordblatt: je Strophe
   `Suchtext=Akkord` der Reihe nach, `kapo: N`; Liedtext wird nie abgetippt) → `aus-ordner` setzt
   `chords`; für vorhandene Lieder `lieder.py akkorde <id> <datei>` / `--entfernen`. Ändert sich der
