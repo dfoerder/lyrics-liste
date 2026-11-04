@@ -117,6 +117,8 @@ mit einer vollständigen Handabschrift überein, bis auf genau eine gemeldete St
    Frag mit AskUserQuestion: eine Frage je Lied (bis zu 4 Lieder pro Aufruf),
    `multiSelect: true`, die Listen als Optionen. Gibt es mehr als 4 Listen, frag
    stattdessen im Text. Eine neue Liste nennt der Nutzer über „Other“.
+   Ein Lied muss in keiner Liste stehen: Ohne `--liste` erscheint es nur unter „Alle Lieder“.
+   Biete das immer an. Passt es neben den Listen nicht mehr in die 4 Optionen, frag im Text.
 4. **Probelauf, dann speichern**, je Lied:
    ```bash
    python3 tools/lieder.py aus-ordner "<gruppe>" --liste "Morgenandacht" --liste "Abendandacht" --probelauf
