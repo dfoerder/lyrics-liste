@@ -6,8 +6,9 @@ Aufruf: python3 tools/stimmen_zu_musicxml.py <name>.stimmen   →  schreibt <nam
         (2 Systeme wie im Gesangbuch: Sopran/Alt oben, Tenor/Bass unten – für die App)
 
 Je Stimme eine Partie (Sopran, Alt, Tenor mit oktaviertem Violinschlüssel, Bass), mit Tonart,
-Taktart und Auftakt. Dauern, die keine einfache Notenlänge sind, werden in übergebundene Noten
-zerlegt. Die Datei lässt sich in MuseScore, Sibelius, Finale o.ä. öffnen. Liedtext ist nicht dabei.
+Taktart und Auftakt. Mit der Zeile „taktwechsel: ja“ bekommt jeder Takt, der länger oder kürzer
+als „takt:“ ist, seine eigene Taktart in Vierteln (z.B. 6/4). Dauern, die keine einfache Notenlänge
+sind, werden in übergebundene Noten zerlegt. Die Datei lässt sich in MuseScore, Sibelius, Finale o.ä. öffnen. Liedtext ist nicht dabei.
 
 write_score() wird auch von midi_zu_musicxml.py benutzt.
 """
@@ -215,7 +216,7 @@ def tokens(path):
         if line.lstrip().startswith('#') or ':' not in line:
             continue
         key, val = (x.strip() for x in line.split(':', 1))
-        if key.lower() in ('titel', 'tempo', 'takt', 'tonart'):
+        if key.lower() in ('titel', 'tempo', 'takt', 'tonart', 'taktwechsel'):
             continue
         voices[key] = [[(t.partition(':')[0], Fraction(t.partition(':')[2] or '1')) for t in bar.split()]
                        for bar in val.split('|')]
@@ -231,7 +232,11 @@ def main(path, choral=False):
     parts = {n: [[(None if t == '-' else [t], d, False) for t, d in bar] for bar in voices[n]] for n in names}
     nbars = len(voices[names[0]])
     pickup = sum(d for _, d in voices[names[0]][0]) < bar_len
-    args = (meta.get('titel', Path(path).stem), parts, [(num, den)] * nbars,
+    times = [(num, den)] * nbars
+    if meta.get('taktwechsel'):
+        lens = [sum(d for _, d in bar) for bar in voices[names[0]]]
+        times = [(num, den) if n == bar_len else (int(n), 4) for n in lens]
+    args = (meta.get('titel', Path(path).stem), parts, times,
             KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup)
     if choral:
         if set(names) not in ({'Sopran', 'Alt', 'Tenor', 'Bass'}, {'Sopran', 'Alt', 'Bass'}):

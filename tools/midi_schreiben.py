@@ -44,7 +44,7 @@ def parse(path):
         if ':' not in line:
             continue
         key, val = (x.strip() for x in line.split(':', 1))
-        if key.lower() in ('titel', 'tempo', 'takt', 'tonart'):
+        if key.lower() in ('titel', 'tempo', 'takt', 'tonart', 'taktwechsel'):
             meta[key.lower()] = val
             continue
         bars = []
