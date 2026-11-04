@@ -646,7 +646,10 @@ def split_voices(path):
             if c == 0xFF:
                 typ = data[q + 1]; q += 2; ln = vlq()
                 if typ == 0x03:
-                    tname = data[q:q + ln].decode('latin-1').strip()
+                    try:
+                        tname = data[q:q + ln].decode('utf-8').strip()
+                    except UnicodeDecodeError:
+                        tname = data[q:q + ln].decode('latin-1').strip()
                 q += ln
                 continue
             if c in (0xF0, 0xF7):

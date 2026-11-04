@@ -111,8 +111,10 @@ def emit_notes(out, bar, tied_in, voice=None, stem=None):
 def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False, minor=False):
     """Chorsatz wie im Gesangbuch: zwei Systeme – Sopran/Alt im Violin-, Tenor/Bass im Bassschlüssel,
     je zwei Stimmen (Hals nach oben/unten). parts braucht Sopran, Alt, Bass und meist Tenor; ohne Tenor
-    (dreistimmiger Satz) steht der Bass allein im unteren System."""
+    (dreistimmiger Satz) steht der Bass allein im unteren System. Eine Überstimme bekommt oben ein eigenes System."""
     staves = [('Sopran', 'Alt', ('G', 2)), ('Tenor' if 'Tenor' in parts else None, 'Bass', ('F', 4))]
+    if 'Überstimme' in parts:
+        staves.insert(0, (None, 'Überstimme', ('G', 2)))
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
            '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" '
            '"http://www.musicxml.org/dtds/partwise.dtd">',
@@ -230,6 +232,7 @@ def main(path, choral=False):
     num, den = (int(x) for x in meta.get('takt', '4/4').split('/'))
     bar_len = Fraction(num * 4, den)
     names = list(voices)
+    names.sort(key=lambda n: n != 'Überstimme')    # in der Partitur steht die Überstimme oben
     parts = {n: [[(None if t == '-' else [t], d, False) for t, d in bar] for bar in voices[n]] for n in names}
     nbars = len(voices[names[0]])
     pickup = sum(d for _, d in voices[names[0]][0]) < bar_len
@@ -241,11 +244,11 @@ def main(path, choral=False):
             KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup,
             meta.get('tonart', 'C').endswith('m'))
     if choral:
-        if set(names) not in ({'Sopran', 'Alt', 'Tenor', 'Bass'}, {'Sopran', 'Alt', 'Bass'}):
+        if set(names) - {'Überstimme'} not in ({'Sopran', 'Alt', 'Tenor', 'Bass'}, {'Sopran', 'Alt', 'Bass'}):
             raise SystemExit('Chorsatz braucht die Stimmen Sopran, Alt, Tenor, Bass (oder Sopran, Alt, Bass).')
         target = Path(path).with_suffix('.chorsatz.musicxml')
         write_choral(target, *args)
-        print(f'{target.name}: Chorsatz (2 Systeme: Sopran/Alt, {"Tenor/Bass" if "Tenor" in names else "Bass"}), {nbars} Takte')
+        print(f'{target.name}: Chorsatz ({"Überstimme, " if "Überstimme" in names else ""}Sopran/Alt, {"Tenor/Bass" if "Tenor" in names else "Bass"}), {nbars} Takte')
         return
     target = Path(path).with_suffix('.musicxml')
     write_score(target, *args)
