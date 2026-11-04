@@ -917,6 +917,16 @@ def read_chord_spec(path):
         if key == 'kapo':
             capo = int(val.strip() or 0)
             continue
+        m = re.fullmatch(r'z(\d+)/(\d+)', key)
+        if m:                             # Zeilenmuster: gilt für jede Strophe, ohne Liedtext
+            marks = {}
+            for tok in val.split():
+                syl, eq, chord = tok.partition('=')
+                if not eq or not syl.isdigit() or not chord:
+                    raise Fehler(f'{Path(path).name}, Zeile {n}: „{tok}“ – erwartet Silbe=Akkord')
+                marks[int(syl)] = chord.split(',')
+            stanzas.setdefault(0, {})[int(m.group(1))] = (int(m.group(2)), marks)
+            continue
         if not key.isdigit():
             raise Fehler(f'{Path(path).name}, Zeile {n}: „{key}“ ist keine Strophennummer')
         pairs = []
@@ -929,8 +939,59 @@ def read_chord_spec(path):
     return capo, stanzas
 
 
+SYLLABLE = re.compile(r'au|äu|eu|ei|ai|ie|aa|ee|oo|[aeioäöüy]|(?<!q)u', re.I)
+ONSET = re.compile(r'(sch|ch|ck|ph|th|.)$', re.I)
+SECTION_LINE = re.compile(r'(strophe|refrain|bridge|intro|schluss|pre-chorus)(\s*\d+)?:?', re.I)
+
+
+def syllable_starts(line):
+    """Beginn jeder Silbe einer deutschen Liedzeile (Zählung nach Vokalen, ohne Silbentrennung im Wörterbuch)."""
+    starts = []
+    for word in re.finditer(r'[^\W\d_]+', line):
+        last_end = None
+        for v in SYLLABLE.finditer(word.group()):
+            if last_end is None:
+                starts.append(word.start())
+            else:
+                gap = word.group()[last_end:v.start()]
+                starts.append(word.start() + v.start() - (len(ONSET.search(gap).group()) if gap else 0))
+            last_end = v.end()
+    return starts
+
+
+def apply_line_chords(lyrics, pattern):
+    """Zeilenmuster {Zeile: (Silbenzahl, {Silbe: [Akkorde]})} auf jede Strophe anwenden → ChordPro-Text."""
+    out, stanza, line_no = [], 0, 0
+    for line in lyrics.split('\n'):
+        if not line.strip():
+            line_no = 0
+            out.append(line)
+            continue
+        if line_no == 0:
+            stanza += 1
+        if SECTION_LINE.fullmatch(line.strip()):
+            out.append(line)
+            continue
+        line_no += 1
+        if line_no not in pattern:
+            raise Fehler(f'Akkorde: kein Muster für Zeile {line_no} (Strophe {stanza})')
+        count, marks = pattern[line_no]
+        starts = syllable_starts(line)
+        if len(starts) != count:
+            raise Fehler(f'Akkorde, Strophe {stanza}, Zeile {line_no}: {len(starts)} Silben gezählt, erwartet {count}')
+        for syl, chords in sorted(marks.items(), reverse=True):
+            idx = starts[syl - 1]
+            line = line[:idx] + ''.join(f'[{c}]' for c in chords) + line[idx:]
+        out.append(line)
+    result = '\n'.join(out)
+    assert strip_chords(result) == lyrics
+    return result
+
+
 def apply_chords(lyrics, stanzas):
     """Akkorde aus dem Muster in den Text setzen → ChordPro-Text."""
+    if 0 in stanzas:
+        return apply_line_chords(lyrics, stanzas[0])
     blocks = [(m.start(), m.end()) for m in re.finditer(r'(?:^.+$\n?)+', lyrics, re.M)]
     inserts = []
     for n, pairs in sorted(stanzas.items()):
@@ -1194,7 +1255,7 @@ def cmd_akkorde(args, data):
     else:
         s.pop('capo', None)
     s['updated'] = now_stamp()
-    per = [f'Str. {n}: {len(pairs) - sum(1 for _, c in pairs if not c)}' for n, pairs in sorted(spec.items())]
+    per = ['Zeilenmuster für alle Strophen'] if 0 in spec else [f'Str. {n}: {len(pairs) - sum(1 for _, c in pairs if not c)}' for n, pairs in sorted(spec.items())]
     print(f'Akkorde gesetzt: {song_line(s)} – {chords_info(s)} ({", ".join(per)})')
     return True
 

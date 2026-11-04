@@ -22,7 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from midi_schreiben import parse  # noqa: E402
 
 DIV = 24                                  # Teilungen je Viertel (16tel und Triolen ganzzahlig)
-KEYS = {'C': 0, 'G': 1, 'D': 2, 'A': 3, 'E': 4, 'F': -1, 'Bb': -2, 'Eb': -3, 'Ab': -4}
+KEYS = {'C': 0, 'G': 1, 'D': 2, 'A': 3, 'E': 4, 'F': -1, 'Bb': -2, 'Eb': -3, 'Ab': -4,
+        'Am': 0, 'Em': 1, 'Bm': 2, 'Dm': -1, 'Gm': -2, 'Cm': -3}
 # Dauer in Vierteln → (Notentyp, Punkte, Triole)
 TYPES = [(Fraction(4), 'whole', 0, False), (Fraction(3), 'half', 1, False), (Fraction(2), 'half', 0, False),
          (Fraction(3, 2), 'quarter', 1, False), (Fraction(4, 3), 'half', 0, True), (Fraction(1), 'quarter', 0, False),
@@ -107,7 +108,7 @@ def emit_notes(out, bar, tied_in, voice=None, stem=None):
     return tied_in
 
 
-def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False):
+def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False, minor=False):
     """Chorsatz wie im Gesangbuch: zwei Systeme – Sopran/Alt im Violin-, Tenor/Bass im Bassschlüssel,
     je zwei Stimmen (Hals nach oben/unten). parts braucht Sopran, Alt, Bass und meist Tenor; ohne Tenor
     (dreistimmiger Satz) steht der Bass allein im unteren System."""
@@ -134,7 +135,7 @@ def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False
             out.append(f'<measure number="{number}"{implicit}>')
             attrs = ''
             if b == 0:
-                attrs += f'<divisions>{DIV}</divisions><key><fifths>{fifths}</fifths></key>'
+                attrs += f'<divisions>{DIV}</divisions><key><fifths>{fifths}</fifths>{"<mode>minor</mode>" if minor else ""}</key>'
             if b == 0 or times[b] != times[b - 1]:
                 attrs += f'<time><beats>{times[b][0]}</beats><beat-type>{times[b][1]}</beat-type></time>'
             if b == 0:
@@ -160,7 +161,7 @@ def write_choral(target, title, parts, times, fifths=0, tempo=None, pickup=False
     Path(target).write_text('\n'.join(out) + '\n', encoding='utf-8')
 
 
-def write_score(target, title, parts, times, fifths=0, tempo=None, pickup=False):
+def write_score(target, title, parts, times, fifths=0, tempo=None, pickup=False, minor=False):
     """parts: {Name: [Takt: [(Töne|None, Dauer in Vierteln, gebunden_zum_nächsten)]]}
     times: je Takt (Zähler, Nenner). Töne = Liste von Tonnamen wie 'F#4' (mehrere = Akkord)."""
     out = ['<?xml version="1.0" encoding="UTF-8"?>',
@@ -188,7 +189,7 @@ def write_score(target, title, parts, times, fifths=0, tempo=None, pickup=False)
             out.append(f'<measure number="{number}"{implicit}>')
             attrs = ''
             if b == 0:
-                attrs += f'<divisions>{DIV}</divisions><key><fifths>{fifths}</fifths></key>'
+                attrs += f'<divisions>{DIV}</divisions><key><fifths>{fifths}</fifths>{"<mode>minor</mode>" if minor else ""}</key>'
             if b == 0 or times[b] != times[b - 1]:
                 attrs += f'<time><beats>{times[b][0]}</beats><beat-type>{times[b][1]}</beat-type></time>'
             if b == 0:
@@ -237,7 +238,8 @@ def main(path, choral=False):
         lens = [sum(d for _, d in bar) for bar in voices[names[0]]]
         times = [(num, den) if n == bar_len else (int(n), 4) for n in lens]
     args = (meta.get('titel', Path(path).stem), parts, times,
-            KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup)
+            KEYS.get(meta.get('tonart', 'C'), 0), float(meta['tempo']) if meta.get('tempo') else None, pickup,
+            meta.get('tonart', 'C').endswith('m'))
     if choral:
         if set(names) not in ({'Sopran', 'Alt', 'Tenor', 'Bass'}, {'Sopran', 'Alt', 'Bass'}):
             raise SystemExit('Chorsatz braucht die Stimmen Sopran, Alt, Tenor, Bass (oder Sopran, Alt, Bass).')

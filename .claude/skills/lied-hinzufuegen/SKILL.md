@@ -300,6 +300,16 @@ meist von einem Blatt, auf dem jemand sie von Hand über den Text geschrieben ha
    Je Strophe der Reihe nach `Suchtext=Akkord`; der Akkord kommt vor den Suchtext (ein kurzes
    Stück der Silbe). `las=` ohne Akkord überspringt ein Vorkommen. Weicht der Text auf dem Blatt
    von der `.txt` ab, gilt die `.txt` – Akkorde auf die gleiche Silbe setzen.
+   Haben alle Strophen dasselbe Muster, geht es ohne jeden Liedtext, als Zeilenmuster für alle
+   Strophen (Zeile/Silbenzahl, dann Silbe=Akkord, zwei Akkorde auf einer Silbe mit Komma):
+   ```
+   kapo: 0
+   z1/11: 1=d 6=g 7=B 8=C 9=d 10=A
+   z2/10: 1=d 2=g 4=d 6=a 7=B 8=C 10=F
+   ```
+   Stehen keine Akkorde bereit, leite sie aus dem vierstimmigen Satz ab und sag, dass sie
+   abgeleitet sind. Moll steht in den `.stimmen` als `tonart: Dm`, sonst passen Noten und Akkorde
+   beim Transponieren nicht zusammen.
 3. **Einlesen:** `aus-ordner "<gruppe>" --ersetzen` (oder `akkorde <id> <datei>`). Ein nicht
    gefundener Suchtext bricht mit Strophe und Suchtext ab. Zur Kontrolle das Muster je Strophe
    ausgeben (Akkorde je Zeile, ohne Text) und mit dem Blatt vergleichen.

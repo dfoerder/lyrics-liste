@@ -4,8 +4,8 @@
 Aufruf: python3 tools/midi_schreiben.py <name>.stimmen   →  schreibt <name>.mid daneben
 
 Notation (.stimmen), Takte mit „|“ getrennt, Dauer in Schlägen nach „:“ (ohne = 1),
-Pause „-“, Vorzeichen „b“/„#“ (Bb3, F#4). Die Tonart steht nur als Information in der
-Datei – Vorzeichen werden immer ausgeschrieben:
+Pause „-“, Vorzeichen „b“/„#“ (Bb3, F#4). Die Tonart (Moll mit „m“: Dm) steht nur als Information
+in der Datei – Vorzeichen werden immer ausgeschrieben:
 
     titel: Der Mond ist aufgegangen
     tempo: 84
@@ -26,7 +26,8 @@ from pathlib import Path
 STEPS = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11, 'H': 11}
 TRACK_NAMES = {'sopran': 'Soprano', 'alt': 'Alto', 'tenor': 'Tenor', 'bass': 'Bass'}
 TPQ = 480
-KEYS = {'C': 0, 'G': 1, 'D': 2, 'A': 3, 'E': 4, 'F': -1, 'Bb': -2, 'Eb': -3, 'Ab': -4}
+KEYS = {'C': 0, 'G': 1, 'D': 2, 'A': 3, 'E': 4, 'F': -1, 'Bb': -2, 'Eb': -3, 'Ab': -4,
+        'Am': 0, 'Em': 1, 'Bm': 2, 'Dm': -1, 'Gm': -2, 'Cm': -3}
 
 
 def pitch(token):
@@ -100,7 +101,7 @@ def main(path):
             (0, b'\xFF\x51\x03' + struct.pack('>I', int(60000000 // bpm))[1:]),
             (0, b'\xFF\x58\x04' + bytes([num, den.bit_length() - 1, 24, 8]))]
     if meta.get('tonart') in KEYS:
-        cond.append((0, b'\xFF\x59\x02' + struct.pack('b', KEYS[meta['tonart']]) + b'\x00'))
+        cond.append((0, b'\xFF\x59\x02' + struct.pack('b', KEYS[meta['tonart']]) + (b'\x01' if meta['tonart'].endswith('m') else b'\x00')))
     tracks = [track(cond)]
     for ch, (name, bars) in enumerate(voices.items()):
         ev, t = [(0, text_event(TRACK_NAMES.get(name.lower(), name))), (0, bytes([0xC0 | ch, 52]))], 0
