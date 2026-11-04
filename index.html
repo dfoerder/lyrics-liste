@@ -179,6 +179,11 @@ a.btn{display:inline-block;text-decoration:none}
 .chord-view .cs{display:inline-flex;flex-direction:column;vertical-align:bottom}
 .chord-view .cc{font-size:.82em;font-weight:700;color:var(--accent-dark);line-height:1.2;padding-right:.3em;white-space:pre}
 .chord-view .ct{white-space:pre}
+.chord-view button.cs{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:left;border-radius:.25rem}
+.chord-view button.cs .ct{border-bottom:1px dotted var(--border2)}
+.chord-view button.cs:hover,.chord-view button.cs:focus-visible{background:var(--border2);outline:none}
+.chord-chips{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.8rem}
+.chord-chips .btn{padding:.3rem .6rem;font-size:.85rem}
 .chord-bar{display:flex;align-items:center;flex-wrap:wrap;gap:.4rem;font-size:.85rem;color:var(--text2);margin:0 0 .8rem}
 .chord-bar .size-btn{width:2rem;height:2rem;border:1px solid var(--border2)}
 .mxl-score{background:#fff;border:1px solid var(--border);border-radius:.4rem;margin-bottom:.6rem;overflow:hidden;padding:2.4rem 0 .2rem}
@@ -310,7 +315,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-10-29';
+const APP_VERSION = '2026-11-04';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -775,6 +780,47 @@ function midiFileToVoices(bytes, filename){
   const conductor = infos[0].notes ? [] : [tracks[0]];
   return noteIdx.map((i,k)=>({name: voiceName(infos[i].name, 'Stimme ' + (k+1)),
     midi: bytesToDataUri(buildMidi(division, [...conductor, tracks[i]]), 'audio/midi')}));
+}
+// .mxl ist ein ZIP mit der Partitur darin; DecompressionStream kann das ohne Bibliothek entpacken
+async function mxlToXml(bytes){
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = bytes.length - 22;
+  while(end>=0 && view.getUint32(end, true)!==0x06054b50) end--;
+  if(end<0) throw new Error('Die .mxl-Datei ist beschädigt.');
+  const entries = {}, decoder = new TextDecoder('utf-8');
+  let p = view.getUint32(end+16, true);
+  for(let i=view.getUint16(end+10, true); i>0; i--){
+    const nameLen = view.getUint16(p+28, true);
+    entries[decoder.decode(bytes.subarray(p+46, p+46+nameLen))] =
+      {method: view.getUint16(p+10, true), size: view.getUint32(p+20, true), offset: view.getUint32(p+42, true)};
+    p += 46 + nameLen + view.getUint16(p+30, true) + view.getUint16(p+32, true);
+  }
+  async function read(name){
+    const e = entries[name], start = e.offset + 30 + view.getUint16(e.offset+26, true) + view.getUint16(e.offset+28, true);
+    const data = bytes.subarray(start, start+e.size);
+    if(e.method===0) return decoder.decode(data);
+    if(typeof DecompressionStream==='undefined') throw new Error('Dieses Gerät kann .mxl nicht entpacken. Bitte als unkomprimiertes .musicxml exportieren.');
+    return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  }
+  let root = null;
+  if(entries['META-INF/container.xml']){
+    const m = /full-path="([^"]+)"/.exec(await read('META-INF/container.xml'));
+    if(m && entries[m[1]]) root = m[1];
+  }
+  root = root || Object.keys(entries).find(n=>/\.(musicxml|xml)$/i.test(n) && !n.startsWith('META-INF/'));
+  if(!root) throw new Error('In der .mxl-Datei ist keine Partitur.');
+  return read(root);
+}
+async function fileToMusicXml(file){
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let xml;
+  if(bytes[0]===0x50 && bytes[1]===0x4B) xml = await mxlToXml(bytes);
+  else xml = new TextDecoder(bytes[0]===0xFF && bytes[1]===0xFE ? 'utf-16le' : 'utf-8').decode(bytes);
+  if(/<score-timewise/.test(xml.slice(0,3000))) throw new Error(`${file.name}: diese MusicXML-Form (score-timewise) kann die App nicht zeichnen.`);
+  if(!/<score-partwise/.test(xml.slice(0,3000))) throw new Error(`${file.name}: bitte eine MusicXML-Datei wählen (.musicxml, .xml oder .mxl).`);
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  if(doc.querySelector('parsererror') || !doc.querySelector('note')) throw new Error(`${file.name}: in dieser MusicXML-Datei sind keine lesbaren Noten.`);
+  return xml;
 }
 async function filesToVoices(files){
   let out = [];
@@ -1361,6 +1407,80 @@ function ScoreViewer({scores, title, onClose}){
 
 // ---------- Gitarrenakkorde (ChordPro im Text: „Her[E]bei“), Transponieren
 function stripChords(text){ return (text||'').replace(/\[[^\]\n]*\]/g, ''); }
+const chordCount = text => ((text||'').match(/\[[^\]\n]*\]/g) || []).length;
+// ChordPro-Zeile → Text und Akkorde je Position im Text, und zurück
+function parseChordLine(line){
+  const marks = {}; let text = '';
+  line.split(/(\[[^\]\n]*\])/).forEach(part=>{
+    const m = /^\[([^\]]*)\]$/.exec(part);
+    if(m) (marks[text.length] = marks[text.length] || []).push(m[1]);
+    else text += part;
+  });
+  return {text, marks};
+}
+function buildChordLine(text, marks){
+  let out = text;
+  Object.keys(marks).map(Number).sort((a,b)=>b-a).forEach(p=>{
+    out = out.slice(0,p) + marks[p].map(c=>`[${c}]`).join('') + out.slice(p);
+  });
+  return out;
+}
+// Akkorde auf einen geänderten Text übertragen: sie bleiben in Zeilen, deren Text gleich geblieben ist
+function reconcileChords(chords, lyrics){
+  const pool = new Map();
+  (chords||'').split('\n').forEach(l=>{
+    const p = parseChordLine(l);
+    if(Object.keys(p.marks).length) pool.set(p.text, [...(pool.get(p.text) || []), l]);
+  });
+  return lyrics.split('\n').map(l=>{ const q = pool.get(l); return q && q.length ? q.shift() : l; }).join('\n');
+}
+// Beginn jeder Silbe einer Liedzeile, gezählt nach Vokalen (wie syllable_starts in tools/lieder.py)
+function syllableStarts(line){
+  const out = [];
+  for(const w of line.matchAll(/[^\s\d.,;:!?'"„“”‘’()…–—-]+/g)){
+    let lastEnd = null;
+    for(const v of w[0].matchAll(/(qu)|au|äu|eu|ei|ai|ie|aa|ee|oo|[aeiouäöüy]/gi)){
+      if(v[1]) continue;
+      if(lastEnd===null) out.push(w.index);
+      else {
+        const gap = w[0].slice(lastEnd, v.index);
+        out.push(w.index + v.index - (gap ? /(sch|ch|ck|ph|th|qu|.)$/i.exec(gap)[0].length : 0));
+      }
+      lastEnd = v.index + v[0].length;
+    }
+    if(lastEnd===null) out.push(w.index);
+  }
+  return out;
+}
+// Akkorde der 1. Strophe je Zeile und Silbe auf die übrigen Strophen übertragen. Zeilen, die schon
+// Akkorde haben, bleiben; Zeilen mit anderer Silbenzahl auch.
+function chordsToAllStanzas(chords){
+  const source = [];
+  let stanza = -1, n = 0, blank = true, filled = 0, skipped = 0;
+  const text = chords.split('\n').map(line=>{
+    if(!line.trim()){ blank = true; return line; }
+    const p = parseChordLine(line);
+    if(SECTION_LABEL.test(p.text.trim())) return line;
+    if(blank){ stanza++; n = 0; blank = false; }
+    const i = n++, starts = syllableStarts(p.text);
+    if(stanza===0){
+      const bySyllable = {};
+      Object.keys(p.marks).map(Number).forEach(pos=>{
+        const k = Math.max(0, starts.filter(x=>x<=pos).length - 1);
+        bySyllable[k] = [...(bySyllable[k] || []), ...p.marks[pos]];
+      });
+      source[i] = {count: starts.length, bySyllable};
+      return line;
+    }
+    if(Object.keys(p.marks).length || !source[i] || !Object.keys(source[i].bySyllable).length) return line;
+    if(starts.length!==source[i].count){ skipped++; return line; }
+    const marks = {};
+    Object.keys(source[i].bySyllable).forEach(k=>{ marks[starts[k]] = source[i].bySyllable[k]; });
+    filled++;
+    return buildChordLine(p.text, marks);
+  }).join('\n');
+  return {text, filled, skipped};
+}
 
 // Deutsche Schreibweise (H, B = Bb, Fis, Es, fis = Moll) oder englische (B, Bb, F#, Am)
 const NAMES = {
@@ -1901,26 +2021,144 @@ function VoicePlayer({voices, transpose=0}){
 }
 
 // Lied auf diesem Gerät bearbeiten. Ein neuer Import überschreibt die Änderungen.
+// Akkorde eingeben: auf eine Silbe tippen, Akkord eintragen. Der Text selbst bleibt dabei unberührt.
+function ChordDialog({value, used, onSubmit, onCancel}){
+  const [v,setV] = useState(value);
+  const [error,setError] = useState('');
+  const ref = useRef(null);
+  useEffect(()=>{ ref.current && ref.current.focus(); },[]);
+  function submit(text){
+    const list = text.trim().split(/\s+/).filter(Boolean);
+    const bad = list.find(c=>!/^\(?[A-Ha-h][^\s\[\]]*\)?$/.test(c));
+    if(bad){ setError(`„${bad}“ ist kein Akkord.`); return; }
+    onSubmit(list);
+  }
+  return (
+    <div className="overlay" onClick={onCancel}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Akkord</h3>
+        {used.length>0 && <div className="chord-chips">
+          {used.map(c=><button key={c} className="btn btn-secondary" onClick={()=>onSubmit([c])}>{c}</button>)}
+        </div>}
+        <div className="field">
+          <input ref={ref} value={v} placeholder="z.B. E, H7, fis" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+            onChange={e=>{ setV(e.target.value); setError(''); }}
+            onKeyDown={e=>{ if(e.key==='Enter') submit(v); if(e.key==='Escape') onCancel(); }} />
+          {error ? <div className="hint" style={{color:'var(--danger)'}}>{error}</div>
+            : <div className="hint">Zwei Akkorde auf einer Silbe mit Leerzeichen trennen.</div>}
+        </div>
+        <div className="dialog-actions">
+          {value && <button className="btn btn-secondary danger-text" onClick={()=>onSubmit([])}>Entfernen</button>}
+          <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
+          <button className="btn btn-primary" onClick={()=>submit(v)}>Übernehmen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function ChordEditor({lyrics, chords, capo, onDone}){
+  const [text,setText] = useState(()=>reconcileChords(chords, lyrics));
+  const [kapo,setKapo] = useState(capo ? String(capo) : '');
+  const [edit,setEdit] = useState(null);     // {line, pos}
+  const [note,setNote] = useState('');
+  const lines = text.split('\n');
+  const used = [...new Set((text.match(/\[[^\]\n]*\]/g) || []).map(c=>c.slice(1,-1)))];
+  const stanzas = lyrics.split(/\n\n+/).length;
+  function done(){ onDone(chordCount(text) ? text : '', Math.min(12, Math.max(0, parseInt(kapo,10) || 0))); }
+  function apply(list){
+    const p = parseChordLine(lines[edit.line]);
+    if(list.length) p.marks[edit.pos] = list; else delete p.marks[edit.pos];
+    setText(lines.map((l,i)=> i===edit.line ? buildChordLine(p.text, p.marks) : l).join('\n'));
+    setNote('');
+    setEdit(null);
+  }
+  function toAll(){
+    const r = chordsToAllStanzas(text);
+    setText(r.text);
+    setNote(`${r.filled} ${r.filled===1 ? 'Zeile' : 'Zeilen'} ergänzt` + (r.skipped ? `, ${r.skipped} mit anderer Silbenzahl ausgelassen.` : '.'));
+  }
+  function button(i, marks, pos, piece){
+    const c = marks[pos];
+    return (
+      <button type="button" className="cs" key={pos} aria-label={c ? `Akkord ${c.join(' ')} ändern` : 'Akkord eingeben'} onClick={()=>setEdit({line:i, pos})}>
+        <span className="cc">{c ? c.join(' ') : ' '}</span>
+        <span className="ct">{piece || ' '}</span>
+      </button>
+    );
+  }
+  function renderLine(line, i){
+    const {text: t, marks} = parseChordLine(line);
+    const cuts = new Set([...syllableStarts(t), ...Object.keys(marks).map(Number)]);
+    const parts = [];
+    for(const m of t.matchAll(/\s+|\S+/g)){
+      if(!m[0].trim()){
+        parts.push(marks[m.index] ? button(i, marks, m.index, m[0]) : ' ');
+        continue;
+      }
+      const inWord = [...cuts].filter(x=>x>m.index && x<m.index+m[0].length).sort((a,b)=>a-b);
+      const bounds = [m.index, ...inWord, m.index+m[0].length];
+      parts.push(<span className="cw" key={'w'+m.index}>{bounds.slice(0,-1).map((b,k)=>button(i, marks, b, t.slice(b, bounds[k+1])))}</span>);
+    }
+    if(marks[t.length]) parts.push(button(i, marks, t.length, ''));
+    return <div className="lyrics-line chord-line" key={i}>{parts}</div>;
+  }
+  const current = edit ? (parseChordLine(lines[edit.line]).marks[edit.pos] || []).join(' ') : '';
+  return (
+    <React.Fragment>
+      <Header title="Gitarrenakkorde" onBack={done}
+        right={<button className="btn btn-primary" onClick={done}>Fertig</button>} />
+      <div className="main">
+        <div className="hint">Tippe auf eine Silbe und trage den Akkord ein, z.B. E, H7 oder fis.</div>
+        <div className="chord-bar" style={{marginTop:'.6rem'}}>
+          <label htmlFor="kapo">Kapo</label>
+          <input id="kapo" value={kapo} inputMode="numeric" style={{width:'3.5rem',padding:'.3rem .5rem',border:'1px solid var(--border2)',borderRadius:'.4rem',background:'var(--bg-card)',color:'var(--text)'}}
+            onChange={e=>setKapo(e.target.value.replace(/\D/g,'').slice(0,2))} />
+          {stanzas>1 && <button className="btn btn-secondary" style={{padding:'.3rem .6rem',fontSize:'.8rem'}} onClick={toAll}>Strophe 1 auf alle übertragen</button>}
+        </div>
+        {note && <div className="hint" style={{marginBottom:'.6rem'}}>{note}</div>}
+        <div className="lyrics-view chord-view">
+          {lines.map((line,i)=>{
+            if(!line.trim()) return <div className="lyrics-gap" key={i} />;
+            const label = stripChords(line).trim();
+            if(SECTION_LABEL.test(label)) return <div className="lyrics-label" key={i}>{label.replace(/:$/,'')}</div>;
+            return renderLine(line, i);
+          })}
+        </div>
+      </div>
+      {edit && <ChordDialog value={current} used={used} onSubmit={apply} onCancel={()=>setEdit(null)} />}
+    </React.Fragment>
+  );
+}
+
 function SongEditor({song, onSave, onCancel, onDelete}){
   const [f,setF] = useState({title: song.title, performer: song.performer, writers: song.writers,
                               year: song.year, lyrics: song.lyrics, link: song.link || ''});
   const initial = useRef({scores: song.scores || [], voices: song.voices || []}).current;
   const [scores,setScores] = useState(initial.scores);
   const [voices,setVoices] = useState(initial.voices);
+  const [musicxml,setMusicxml] = useState(song.musicxml || '');
+  const [chords,setChords] = useState(song.chords || '');
+  const [capo,setCapo] = useState(song.capo || 0);
+  const [chordEdit,setChordEdit] = useState(false);
   const [busy,setBusy] = useState('');
   const [fileError,setFileError] = useState('');
   const [confirmDiscard,setConfirmDiscard] = useState(false);
   const [confirmDelete,setConfirmDelete] = useState(false);
   const [saving,setSaving] = useState(false);
   const isNew = !song.id;
-  const changed = Object.keys(f).some(k=>f[k]!==(song[k] || '')) || scores!==initial.scores || voices!==initial.voices;
+  const changed = Object.keys(f).some(k=>f[k]!==(song[k] || '')) || scores!==initial.scores || voices!==initial.voices
+    || musicxml!==(song.musicxml || '') || chords!==(song.chords || '') || capo!==(song.capo || 0);
+  const cleaned = cleanLyrics(f.lyrics);
+  const keptChords = chords ? chordCount(reconcileChords(chords, cleaned)) : 0;
+  const bracketsInText = /[\[\]]/.test(cleaned);
   const linkOk = !f.link.trim() || /^https:\/\/\S+$/.test(f.link.trim());
   async function pick(kind, e){
     const files = [...e.target.files]; e.target.value = '';
     if(!files.length) return;
-    setFileError(''); setBusy(kind==='scores' ? 'Noten werden umgewandelt …' : 'MIDI wird gelesen …');
+    setFileError(''); setBusy(kind==='scores' ? 'Noten werden umgewandelt …' : kind==='musicxml' ? 'MusicXML wird gelesen …' : 'MIDI wird gelesen …');
     try{
       if(kind==='scores') setScores(await filesToScores(files));
+      else if(kind==='musicxml') setMusicxml(await fileToMusicXml(files[0]));
       else setVoices(await filesToVoices(files));
     }catch(err){ setFileError(err.message || String(err)); }
     setBusy('');
@@ -1930,15 +2168,24 @@ function SongEditor({song, onSave, onCancel, onDelete}){
   async function save(){
     if(!f.title.trim() || saving || !linkOk || busy) return;
     setSaving(true);
-    const {scores: _s, voices: _v, link: _l, ...rest} = song;
+    const {scores: _s, voices: _v, link: _l, musicxml: _m, chords: _c, capo: _k, ...rest} = song;
     const next = {...rest, id: song.id || newSongId(f.title), title: f.title.trim(), performer: f.performer.trim(),
-      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleanLyrics(f.lyrics), edited: true, updated: nowStamp()};
+      writers: f.writers.trim(), year: f.year.trim(), lyrics: cleaned, edited: true, updated: nowStamp()};
     if(f.link.trim()) next.link = f.link.trim();
     if(scores.length) next.scores = scores;
     if(voices.length) next.voices = voices;
-    if(next.chords && stripChords(next.chords) !== next.lyrics){ delete next.chords; delete next.capo; }
+    if(musicxml) next.musicxml = musicxml;
+    const finalChords = chords ? reconcileChords(chords, cleaned) : '';
+    if(chordCount(finalChords) && stripChords(finalChords)===cleaned){
+      next.chords = finalChords;
+      if(capo) next.capo = capo;
+    }
     const ok = await onSave(next);
     if(!ok) setSaving(false);
+  }
+  if(chordEdit){
+    return <ChordEditor lyrics={cleaned} chords={chords} capo={capo}
+      onDone={(text, k)=>{ setChords(text); setCapo(text ? k : 0); setChordEdit(false); }} />;
   }
   return (
     <React.Fragment>
@@ -1953,7 +2200,15 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
           <textarea value={f.lyrics} onChange={set('lyrics')} />
-          {song.chords && cleanLyrics(f.lyrics)!==song.lyrics && <div className="hint" style={{color:'var(--danger)'}}>Dieses Lied hat Gitarrenakkorde. Wenn du den Text änderst, gehen sie beim Speichern verloren.</div>}</div>
+          {keptChords < chordCount(chords) && <div className="hint" style={{color:'var(--danger)'}}>Akkorde bleiben nur in Zeilen, deren Text gleich ist: {chordCount(chords)-keptChords} von {chordCount(chords)} fallen beim Speichern weg.</div>}</div>
+        <div className="field"><label>Gitarrenakkorde</label>
+          <div className="file-row">
+            <span>{chords ? `${keptChords} ${keptChords===1 ? 'Akkord' : 'Akkorde'}` + (capo ? `, Kapo ${capo}` : '') : 'keine'}</span>
+            <button className="btn btn-secondary" disabled={!cleaned || bracketsInText} onClick={()=>setChordEdit(true)}>{chords ? 'Bearbeiten' : 'Eingeben'}</button>
+            {chords && <button className="btn btn-secondary" onClick={()=>{ setChords(''); setCapo(0); }}>Entfernen</button>}
+          </div>
+          {!cleaned && <div className="hint">Zuerst den Liedtext eintragen.</div>}
+          {bracketsInText && <div className="hint" style={{color:'var(--danger)'}}>Der Text enthält eckige Klammern [ ]. Bitte zuerst entfernen, sonst gehen keine Akkorde.</div>}</div>
         <div className="field"><label>Link zum Anhören (Spotify, YouTube …)</label>
           <input type="url" value={f.link} onChange={set('link')} placeholder="https://open.spotify.com/…"
             autoCapitalize="off" autoCorrect="off" spellCheck={false} />
@@ -1965,6 +2220,14 @@ function SongEditor({song, onSave, onCancel, onDelete}){
               <input type="file" accept="application/pdf,.pdf,image/png,image/jpeg,image/gif" multiple onChange={e=>pick('scores', e)} /></span>
             {scores.length>0 && <button className="btn btn-secondary" onClick={()=>setScores([])}>Entfernen</button>}
           </div></div>
+        <div className="field"><label>Noten als MusicXML</label>
+          <div className="file-row">
+            <span>{musicxml ? 'vorhanden' + (xmlKey(musicxml) ? ` (${keyLabel(xmlKey(musicxml))})` : '') : 'keine'}</span>
+            <span className="btn btn-secondary file-pick">{musicxml ? 'Ersetzen' : 'Datei wählen'}
+              <input type="file" onChange={e=>pick('musicxml', e)} /></span>
+            {musicxml && <button className="btn btn-secondary" onClick={()=>setMusicxml('')}>Entfernen</button>}
+          </div>
+          <div className="hint">Eine Datei .musicxml, .xml oder .mxl. Die App zeichnet die Noten dann selbst und kann sie transponieren.</div></div>
         <div className="field"><label>Übungsstimmen (MIDI)</label>
           <div className="file-row">
             <span>{voices.length ? voices.map(v=>v.name).join(', ') : 'keine'}</span>

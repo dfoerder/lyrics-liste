@@ -940,7 +940,7 @@ def read_chord_spec(path):
 
 
 SYLLABLE = re.compile(r'au|äu|eu|ei|ai|ie|aa|ee|oo|[aeioäöüy]|(?<!q)u', re.I)
-ONSET = re.compile(r'(sch|ch|ck|ph|th|.)$', re.I)
+ONSET = re.compile(r'(sch|ch|ck|ph|th|qu|.)$', re.I)
 SECTION_LINE = re.compile(r'(strophe|refrain|bridge|intro|schluss|pre-chorus)(\s*\d+)?:?', re.I)
 
 
@@ -1291,6 +1291,7 @@ def cmd_ignorieren(args, data):
 # ---------------------------------------------------------------- Aus der App übernehmen
 
 APP_FIELDS = (('title', 'Titel'), ('performer', 'Interpret'), ('writers', 'Songwriter'), ('year', 'Jahr'), ('lyrics', 'Text'))
+APP_EXTRAS = (('chords', 'Akkorde'), ('musicxml', 'MusicXML'))   # nur übernehmen, wenn die Datei sie hat; nie ausgeben
 
 
 def cmd_uebernehmen(args, data):
@@ -1313,6 +1314,7 @@ def cmd_uebernehmen(args, data):
             new.append(s)
             continue
         diffs = [name for key, name in APP_FIELDS if (s.get(key) or '') != (old.get(key) or '')]
+        diffs += [name for key, name in APP_EXTRAS if s.get(key) and s[key] != old.get(key)]
         if diffs:
             if stamp_time(old.get('updated')) > stamp_time(s.get('updated')):
                 diffs.append('MAC_NEUER')
@@ -1337,6 +1339,7 @@ def cmd_uebernehmen(args, data):
                 info.append(f'Text ({a} → {b} Zeilen)')
             else:
                 info.append(f'{name}: „{old.get(key) or "–"}“ → „{s.get(key) or "–"}“')
+        info += [name for _, name in APP_EXTRAS if name in diffs]
         when = f' | Fassung App {s.get("updated") or "ohne Zeitstempel"}, Mac {old.get("updated") or "ohne Zeitstempel"}'
         warn = ' | ACHTUNG: die Fassung auf dem Mac ist neuer – bei --alle übergangen, nur mit --id' if 'MAC_NEUER' in diffs else ''
         print(f'  GEÄNDERT: [{s["id"]}] {song_line(old)}: ' + '; '.join(info) + when + warn)
@@ -1349,7 +1352,7 @@ def cmd_uebernehmen(args, data):
         if args.alle or s['id'] in wanted:
             song = {k: (s.get(k) or '') for k in ('id', 'title', 'writers', 'performer', 'year', 'lyrics')}
             song['updated'] = s.get('updated') or now_stamp()
-            for extra in ('scores', 'voices', 'link'):
+            for extra in ('scores', 'voices', 'link', 'chords', 'capo', 'musicxml'):
                 if s.get(extra):
                     song[extra] = s[extra]
             data['songs'].append(song)
@@ -1361,6 +1364,17 @@ def cmd_uebernehmen(args, data):
         if s['id'] in wanted or (args.alle and 'MAC_NEUER' not in diffs):
             for key, _ in APP_FIELDS:
                 old[key] = s.get(key) or ''
+            if s.get('musicxml'):
+                old['musicxml'] = s['musicxml']
+            if s.get('chords'):
+                old['chords'] = s['chords']
+                old.pop('capo', None)
+                if s.get('capo'):
+                    old['capo'] = s['capo']
+            if old.get('chords') and strip_chords(old['chords']) != old['lyrics']:
+                old.pop('chords')
+                old.pop('capo', None)
+                print(f'HINWEIS: {old["id"]}: Text geändert, die Akkorde auf dem Mac passen nicht mehr und fallen weg.')
             old['updated'] = s.get('updated') or now_stamp()
             print(f'Übernommen (geändert): {song_line(old)}')
             applied += 1

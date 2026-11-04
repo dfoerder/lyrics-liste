@@ -153,8 +153,9 @@ weitergeben, meist in die WhatsApp-Gruppe. Der Nutzer sichert die Datei auf dem 
 2. **Fragen,** welche übernommen werden sollen und in welche Listen neue Lieder kommen.
 3. **Übernehmen:** `uebernehmen <datei> --id <id> … --liste "…"` oder `--alle`. Neue Lieder
    behalten ihre id (`app-…`), damit sie in den Listen der Familie bleiben. Bei geänderten
-   Liedern werden Titel, Interpret, Songwriter, Jahr und Text ersetzt; Noten, Stimmen und Link
-   bleiben.
+   Liedern werden Titel, Interpret, Songwriter, Jahr und Text ersetzt, dazu Akkorde und MusicXML,
+   wenn die Datei sie hat; Noten, Stimmen und Link bleiben. Passen die Akkorde auf dem Mac nicht
+   mehr zum neuen Text, fallen sie weg (Hinweis).
 
 **Dateien aus der App:** Im Lied gibt es ⋯ → „Als Dateien sichern“. Das ergibt `name.txt`,
 `name.pdf` und `name.mid` im selben Format wie hier. Legt der Nutzer sie in `privat/data` ab,

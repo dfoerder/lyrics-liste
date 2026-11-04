@@ -105,7 +105,7 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Silben zählt `syllable_starts`, passt eine Zeile nicht, bricht es mit Strophe und Zeile ab.
 - `lieder.py uebernehmen <datei> [--alle | --id …] [--liste …]` — Datei aus der App (von der
   Familie weitergegeben) mit der Sammlung vergleichen: NEU/GEÄNDERT anzeigen (ohne Texte) und
-  auf Wunsch übernehmen.
+  auf Wunsch übernehmen, auch Akkorde und MusicXML (nur wenn die Datei sie hat).
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
 - `lieder-prompt.md` — Alternative für ein Claude-Projekt in der Claude-App.
@@ -169,9 +169,17 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text, Link (https), Noten hochladen (PDF
   über pdf.js 3.11.174 von cdnjs, nur bei Bedarf geladen – braucht dann Internet; Seiten als
   JPEG mit abgeschnittenem Rand, `pdfToScores`/`trimCanvas`; oder PNG/JPEG unverändert),
+  Noten als MusicXML hochladen (`fileToMusicXml`: .musicxml, .xml oder .mxl, Letzteres entpackt
+  `mxlToXml` ohne Bibliothek; das Dateifeld hat bewusst kein `accept`, weil iOS die Endung sonst
+  sperren kann), Gitarrenakkorde (`ChordEditor`),
   Übungsstimmen hochladen (MIDI, `filesToVoices`: mehrstimmige Datei wird je Spur aufgeteilt,
   sonst Name aus `-s/-a/-t/-b`); speichert über `saveSong` in IndexedDB, Verwerfen mit
   Rückfrage, „Lied löschen“ (`deleteSong`)
+- `ChordEditor` / `ChordDialog` — Akkorde im Editor: auf eine Silbe tippen (`syllableStarts`, zählt
+  wie `syllable_starts` in `lieder.py`), Akkord eintragen; schon benutzte Akkorde als Knöpfe,
+  Kapo-Feld, „Strophe 1 auf alle übertragen“ (`chordsToAllStanzas`: nur Zeilen ohne Akkorde und mit
+  gleicher Silbenzahl). Der Text ist dort nicht änderbar, `stripChords(chords)===lyrics` bleibt so
+  immer wahr. Eckige Klammern im Liedtext sperren die Eingabe.
 - `saveSongFiles` — Liedansicht ⋯ → „Als Dateien sichern“: `name.txt` (Kopf „Titel, Person,
   Jahr“, Link-Zeile, Text – wie in `privat/data`), `name.pdf` (Notenbilder, eigener kleiner
   PDF-Schreiber `scoresToPdf`), `name.mid` (alle Stimmen in einer Format-1-Datei,
@@ -207,8 +215,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Bass-Lage: `liftBass` (für Noten über `xmlLines`, für Stimmen über `voicesBassLift`) hebt die
   tiefste Stimme abschnittsweise um eine Oktave, wo sie durchs Transponieren unter F2
   (`BASS_FLOOR`, oder den tiefsten Ton des Originals) fiele; kleinste Sprünge, möglichst nicht über
-  die nächsthöhere Stimme; Hinweis in der Leiste. Druck und Suche nutzen weiter `lyrics`. Der Editor verwirft
-  `chords`, wenn der Text geändert wird (mit Warnung).
+  die nächsthöhere Stimme; Hinweis in der Leiste. Druck und Suche nutzen weiter `lyrics`. Ändert der
+  Editor den Text, bleiben Akkorde nur in Zeilen mit gleichem Text (`reconcileChords`, mit Warnung).
 - `FontSizeButtons` — Schrift der Liedtexte kleiner/größer (CSS-Variable `--lyrics-scale`)
 - `PrintView` — Druckansicht der ganzen Liste
 
