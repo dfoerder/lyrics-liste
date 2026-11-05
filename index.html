@@ -261,6 +261,10 @@ a.btn{display:inline-block;text-decoration:none}
 .vp-chip{padding:.4rem .65rem;border-radius:999px;border:1px solid var(--border2);background:var(--bg);color:var(--text2);font-size:.85rem;font-weight:600}
 .vp-chip.small{padding:.25rem .7rem;font-size:.8rem}
 .vp-chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.vp-mix{margin-top:.2rem}
+.vp-reset{display:block;margin-top:.6rem}
+.vp-voice{flex:none;width:6.6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vp-tempo:disabled{opacity:.35}
 .vp-line{display:flex;align-items:center;gap:.6rem;margin-top:.7rem}
 .vp-label{font-size:.8rem;color:var(--muted);min-width:6.5rem}
 .vp-tempo{flex:1;min-width:0;accent-color:var(--accent)}
@@ -315,7 +319,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-04';
+const APP_VERSION = '2026-11-05';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1774,7 +1778,25 @@ function ListChooser({song, myLists, onToggle, onCreate, onClose}){
 // ---------------------------------------------------------------- Stimmen (MIDI-Übungsplayer)
 // Lieder können je Stimme eine MIDI-Datei haben (song.voices = [{name, midi: data-URI}]).
 // Der Klang wird mit Web Audio selbst erzeugt – keine Bibliothek, keine Klangdateien.
-const LS_VOICE = 'lyrics-stimme';   // zuletzt gewählte Stimme (Name), pro Gerät
+const LS_VOICE = 'lyrics-stimme';      // alt: zuletzt gewählte Stimme, wird einmal nach LS_MIX übernommen
+const LS_MIX = 'lyrics-stimmen-mix';   // je Stimmname {on, level}, pro Gerät, gilt für alle Lieder
+const MIX_DEFAULT = {on:true, level:100};
+const mixOf = (mix, name) => mix[name] || MIX_DEFAULT;
+const mixGain = m => m.on ? Math.pow(m.level/100, 2) : 0;   // quadratisch: klingt gleichmäßiger als linear
+
+function loadMix(tracks){
+  try{
+    const saved = localStorage.getItem(LS_MIX);
+    if(saved) return JSON.parse(saved) || {};
+    const old = localStorage.getItem(LS_VOICE);
+    if(!old || !tracks.some(t=>t.name===old)) return {};
+    const mix = {};
+    tracks.forEach(t=>{ mix[t.name] = {on:true, level:t.name===old ? 100 : 50}; });
+    localStorage.setItem(LS_MIX, JSON.stringify(mix));
+    localStorage.removeItem(LS_VOICE);
+    return mix;
+  }catch(e){ return {}; }
+}
 
 function dataUriBytes(uri){
   const bin = atob(uri.slice(uri.indexOf(',')+1));
@@ -1889,26 +1911,21 @@ function playTone(ctx, dest, midi, t0, dur, nodes){
 function VoicePlayer({voices, transpose=0}){
   const tracks = parsedVoices(voices);
   const [playing,setPlaying] = useState(false);
-  const [focus,setFocus] = useState(()=>{
-    let name=null; try{ name=localStorage.getItem(LS_VOICE); }catch(e){}
-    return Math.max(-1, tracks.findIndex(t=>t.name===name));
-  });
-  const [others,setOthers] = useState('leise');   // 'leise' | 'aus'
+  const [mix,setMix] = useState(()=>loadMix(tracks));
   const [tempo,setTempo] = useState(100);          // Prozent des Originaltempos
   const [loop,setLoop] = useState(false);
   const [pos,setPos] = useState(0);                // Position in Schlägen
   const eng = useRef(null);
   const settings = useRef({});
   const bassLift = useMemo(()=>voicesBassLift(voices, transpose), [voices, transpose]);
-  settings.current = {focus, others, tempo, loop, transpose, bassLift};
+  settings.current = {mix, tempo, loop, transpose, bassLift};
 
   const total = tracks.length ? Math.max(...tracks.map(t=>t.length)) : 0;
   const baseBpm = tracks.length ? tracks[0].bpm : 100;
   const bpb = tracks.length ? tracks[0].beatsPerBar : 4;
 
   function levels(){
-    const {focus, others} = settings.current;
-    return tracks.map((_,i)=> focus<0 || i===focus ? 1 : (others==='leise' ? 0.22 : 0));
+    return tracks.map(t=>mixGain(mixOf(settings.current.mix, t.name)));
   }
 
   function stop(resetPos){
@@ -1965,17 +1982,26 @@ function VoicePlayer({voices, transpose=0}){
   useEffect(()=>{
     const e=eng.current; if(!e) return;
     levels().forEach((v,i)=>e.gains[i].gain.setTargetAtTime(v, e.ctx.currentTime, 0.03));
-  }, [focus, others]);
+  }, [mix]);
   // Tempo geändert: an der aktuellen Stelle neu einsetzen
   useEffect(()=>{ if(eng.current) start(Math.max(0,pos)); }, [tempo]);
   useEffect(()=>()=>stop(false), []);
 
   if(!tracks.length) return null;
 
-  function chooseVoice(i){
-    setFocus(i);
-    try{ if(i<0) localStorage.removeItem(LS_VOICE); else localStorage.setItem(LS_VOICE, tracks[i].name); }catch(e){}
+  function changeMix(next){
+    setMix(next);
+    try{ localStorage.setItem(LS_MIX, JSON.stringify(next)); }catch(e){}
   }
+  function changeVoice(name, change){
+    changeMix({...mix, [name]: {...mixOf(mix, name), ...change}});
+  }
+  function allEqual(){
+    const next={...mix};
+    tracks.forEach(t=>{ next[t.name]=MIX_DEFAULT; });
+    changeMix(next);
+  }
+  const mixed = tracks.some(t=>{ const m=mixOf(mix, t.name); return !m.on || m.level!==100; });
   function seek(beat){
     setPos(beat);
     if(eng.current) start(beat);
@@ -1995,20 +2021,21 @@ function VoicePlayer({voices, transpose=0}){
       <input className="vp-pos" type="range" min={0} max={Math.max(0,(bars-1)*bpb)} step={bpb}
         value={Math.min(Math.floor(pos/bpb+1e-6)*bpb, (bars-1)*bpb)} aria-label="Takt"
         onChange={ev=>seek(Number(ev.target.value))} />
-      <div className="vp-chips" role="group" aria-label="Stimme">
-        <button className={'vp-chip'+(focus<0?' on':'')} onClick={()=>chooseVoice(-1)}>Alle</button>
-        {tracks.map((t,i)=>
-          <button key={i} className={'vp-chip'+(focus===i?' on':'')} onClick={()=>chooseVoice(i)}>{t.name}</button>)}
+      <div className="vp-mix" role="group" aria-label="Stimmen">
+        {tracks.map(t=>{
+          const m=mixOf(mix, t.name);
+          return (
+            <div className="vp-line" key={t.name}>
+              <button className={'vp-chip vp-voice'+(m.on?' on':'')} aria-pressed={m.on}
+                onClick={()=>changeVoice(t.name, {on:!m.on})}>{t.name}</button>
+              <input className="vp-tempo" type="range" min={5} max={100} step={5} value={m.level} disabled={!m.on}
+                aria-label={'Lautstärke '+t.name} onChange={ev=>changeVoice(t.name, {level:Number(ev.target.value)})} />
+              <span className="vp-value">{m.on ? m.level+'%' : 'aus'}</span>
+            </div>
+          );
+        })}
+        {mixed && <button className="vp-link vp-reset" onClick={allEqual}>Alle an, gleich laut</button>}
       </div>
-      {focus>=0 && (
-        <div className="vp-line">
-          <span className="vp-label">Andere Stimmen</span>
-          <div className="vp-chips">
-            <button className={'vp-chip small'+(others==='leise'?' on':'')} onClick={()=>setOthers('leise')}>leise</button>
-            <button className={'vp-chip small'+(others==='aus'?' on':'')} onClick={()=>setOthers('aus')}>aus</button>
-          </div>
-        </div>
-      )}
       <div className="vp-line">
         <span className="vp-label">Tempo</span>
         <input className="vp-tempo" type="range" min={50} max={130} step={5} value={tempo}

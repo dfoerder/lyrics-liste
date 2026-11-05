@@ -318,7 +318,7 @@ meist von einem Blatt, auf dem jemand sie von Hand über den Text geschrieben ha
 ## Übungsstimmen (MIDI)
 
 Ein Lied kann pro Stimme eine MIDI-Datei haben. Die App zeigt dann einen Übungsplayer:
-eigene Stimme laut, die anderen leise oder aus, Tempo einstellbar. Die MIDI-Dateien
+jede Stimme einzeln an/aus und mit eigener Lautstärke, Tempo einstellbar. Die MIDI-Dateien
 liegen meist neben dem Notenscan in `privat/scans/` und enden auf `-s`, `-a`, `-t`, `-b`
 (Sopran, Alt, Tenor, Bass):
 

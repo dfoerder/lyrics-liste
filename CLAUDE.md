@@ -134,7 +134,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `:root` (dunkle Werte in `@media screen`), der Druck bleibt immer hell; Noten bleiben weiß.
 - `localStorage` `lyrics-akkorde-zeigen` (Akkord-Ansicht an/aus, für alle Lieder) und
   `lyrics-tonart` (`{id: Grundton 0–11}`, gewählte Zieltonart je Lied; fehlt = Original).
-- `localStorage` `lyrics-stimme` — zuletzt gewählte Übungsstimme (Name, z.B. „Bass“).
+- `localStorage` `lyrics-stimmen-mix` — Übungsstimmen je Stimmname `{on, level}` (an/aus, Lautstärke
+  5–100 %), gilt für alle Lieder auf dem Gerät; fehlt ein Name: an, 100 %. Der alte Schlüssel
+  `lyrics-stimme` wird einmalig übernommen (gewählte Stimme 100 %, andere 50 %) und gelöscht.
 - `localStorage` `lyrics-schriftgroesse` — Index in `FONT_SCALES` für die Schrift der
   Liedtexte (Knöpfe A/A in Lied- und Druckansicht); der Ausdruck bleibt bei 13pt.
 - Alte Schlüssel `lyrics-lists` / `lyrics-songs` (v1) werden beim Import bzw.
@@ -155,7 +157,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
 - `VoicePlayer` — Übungsplayer für `song.voices`: liest die MIDI-Dateien selbst
   (`parseMidi`, nur erstes Tempo) und erzeugt den Klang mit Web Audio (`playTone`,
-  keine Bibliothek, keine Klangdateien). Stimme wählen (eigene laut, andere leise/aus),
+  keine Bibliothek, keine Klangdateien). Mixer: jede Stimme einzeln an/aus und mit eigener Lautstärke
+  (`mixOf`, `mixGain`), auch während der Wiedergabe; „Alle an, gleich laut“ setzt zurück.
   Tempo 50–130 %, Takt springen, Wiederholen. Geplant wird laufend 2 Schläge voraus.
   iPhone-Stummschalter: `navigator.audioSession.type='playback'` plus stummes
   `<audio>` im Hintergrund (`setSilentAudio`).
