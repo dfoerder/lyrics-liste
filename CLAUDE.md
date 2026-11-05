@@ -134,6 +134,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `:root` (dunkle Werte in `@media screen`), der Druck bleibt immer hell; Noten bleiben weiß.
 - `localStorage` `lyrics-akkorde-zeigen` (Akkord-Ansicht an/aus, für alle Lieder) und
   `lyrics-tonart` (`{id: Grundton 0–11}`, gewählte Zieltonart je Lied; fehlt = Original).
+- `localStorage` `lyrics-noten-stimmen` — in den gezeichneten Noten ausgeblendete Stimmen je Lied
+  (`{id: [Namen]}`), Leiste `ScoreVoiceBar` über den Noten; unabhängig vom Mixer der Übungsstimmen.
 - `localStorage` `lyrics-stimmen-mix` — Übungsstimmen je Stimmname `{on, level}` (an/aus, Lautstärke
   5–100 %), gilt für alle Lieder auf dem Gerät; fehlt ein Name: an, 100 %. Der alte Schlüssel
   `lyrics-stimme` wird einmalig übernommen (gewählte Stimme 100 %, andere 50 %) und gelöscht.
@@ -167,7 +169,8 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `MusicXmlScore` — zeichnet `song.musicxml` mit OpenSheetMusicDisplay 1.8.9 (jsDelivr, erst bei
   Bedarf geladen, `sw.js` `LAZY_ASSETS` speichert sie dann für offline; ebenso pdf.js); weißer
   Hintergrund auch im Dunkelmodus; Umschalter „Original-Notenblatt zeigen“, wenn es auch `scores`
-  gibt; bei Fehler Rückfall aufs Notenbild
+  gibt; bei Fehler Rückfall aufs Notenbild; `hideXmlVoices` nimmt ausgeblendete Stimmen nach dem
+  Transponieren aus der Partitur (Namen aus dem Partienamen „Sopran/Alt“, `xmlVoiceList`)
 - `SongEditor` — „✎ Bearbeiten“ im Lied und „+ Neues Lied“ (Alle Lieder, leere Startseite;
   `phase` `new`): Titel, Interpret, Jahr, Songwriter, Text, Link (https), Noten hochladen (PDF
   über pdf.js 3.11.174 von cdnjs, nur bei Bedarf geladen – braucht dann Internet; Seiten als

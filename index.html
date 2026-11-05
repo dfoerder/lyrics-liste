@@ -261,6 +261,8 @@ a.btn{display:inline-block;text-decoration:none}
 .vp-chip{padding:.4rem .65rem;border-radius:999px;border:1px solid var(--border2);background:var(--bg);color:var(--text2);font-size:.85rem;font-weight:600}
 .vp-chip.small{padding:.25rem .7rem;font-size:.8rem}
 .vp-chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.score-voices{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.6rem}
+.score-voices .vp-label{min-width:0}
 .vp-mix{margin-top:.2rem}
 .vp-reset{display:block;margin-top:.6rem}
 .vp-voice{flex:none;width:6.6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -305,6 +307,7 @@ const LS_SHOW_SCORES = 'lyrics-noten-zeigen';
 // Gitarrenakkorde über dem Text zeigen (true/false) und Transponierung je Lied ({id: Halbtöne})
 const LS_SHOW_CHORDS = 'lyrics-akkorde-zeigen';
 const LS_KEY = 'lyrics-tonart';   // gewählte Zieltonart je Lied: {id: Tonhöhenklasse 0–11}
+const LS_SCORE_HIDDEN = 'lyrics-noten-stimmen';   // in den Noten ausgeblendete Stimmen je Lied: {id: [Namen]}
 // Darstellung: 'auto' (wie iPhone), 'hell', 'dunkel' – wird auch im <head> vor dem Zeichnen gelesen
 const LS_THEME = 'lyrics-darstellung';
 const THEMES = {auto: 'Automatisch (wie iPhone)', hell: 'Immer hell', dunkel: 'Immer dunkel'};
@@ -319,7 +322,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-05';
+const APP_VERSION = '2026-11-05-2';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1350,8 +1353,11 @@ function loadOsmd(){
   });
   return osmdPromise;
 }
-function MusicXmlScore({xml: original, shift=0, onFail}){
-  const xml = useMemo(()=>{ try{ return transposeXml(original, shift); }catch(e){ return original; } }, [original, shift]);
+function MusicXmlScore({xml: original, shift=0, hidden=[], onFail}){
+  const hiddenKey = hidden.join('\n');
+  const xml = useMemo(()=>{
+    try{ return hideXmlVoices(transposeXml(original, shift), hidden); }catch(e){ return original; }
+  }, [original, shift, hiddenKey]);
   const ref = useRef(null);
   const [state,setState] = useState('loading');
   useEffect(()=>{
@@ -1664,6 +1670,61 @@ function transposeXml(xml, shift){
     else if(alterEl) alterEl.remove();
   });
   doc.querySelectorAll('accidental').forEach(el=>el.remove());
+  return new XMLSerializer().serializeToString(doc);
+}
+
+// Stimmen der Partitur: je Partie und <voice>, Namen aus dem Partienamen („Sopran/Alt“)
+const xmlNoteVoice = note => (note.querySelector('voice')||{}).textContent || '1';
+const xmlScorePart = (doc, part) => Array.from(doc.querySelectorAll('score-part')).find(s=>s.getAttribute('id')===part.getAttribute('id'));
+function xmlVoiceList(doc){
+  const out = [];
+  doc.querySelectorAll('part').forEach(part=>{
+    const ids = [];
+    part.querySelectorAll('note').forEach(n=>{ const v = xmlNoteVoice(n); if(!ids.includes(v)) ids.push(v); });
+    const sp = xmlScorePart(doc, part), nameEl = sp && sp.querySelector('part-name');
+    const full = nameEl ? nameEl.textContent.trim() : '';
+    const names = full.split('/').map(n=>n.trim()).filter(Boolean);
+    ids.forEach((voice,i)=>out.push({part, voice, name: names.length===ids.length ? names[i]
+      : full ? (ids.length>1 ? `${full} ${i+1}` : full) : `Stimme ${out.length+1}`}));
+  });
+  return out;
+}
+function xmlVoiceNames(xml){
+  try{ return xmlVoiceList(new DOMParser().parseFromString(xml, 'application/xml')).map(v=>v.name); }catch(e){ return []; }
+}
+// Entfernt Stimmen aus der Partitur. Der Platz im Takt bleibt über <forward> stimmig; eine leere Partie
+// fällt ganz weg. Bleibt in einer Partie nur eine Stimme, wählt die Notenanzeige die Halsrichtung selbst.
+function hideXmlVoices(xml, hidden){
+  if(!hidden.length) return xml;
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const list = xmlVoiceList(doc);
+  const isHidden = v => hidden.includes(v.name);
+  if(!list.some(isHidden) || list.every(isHidden)) return xml;
+  new Set(list.map(v=>v.part)).forEach(part=>{
+    const inPart = list.filter(v=>v.part===part), kept = inPart.filter(v=>!isHidden(v));
+    if(kept.length===inPart.length) return;
+    if(!kept.length){
+      const sp = xmlScorePart(doc, part);
+      if(sp) sp.remove();
+      part.remove();
+      return;
+    }
+    part.querySelectorAll('note').forEach(n=>{
+      if(kept.some(v=>v.voice===xmlNoteVoice(n))){
+        const stem = n.querySelector('stem');
+        if(stem && kept.length===1) stem.remove();
+        return;
+      }
+      const dur = n.querySelector('duration');
+      if(dur && !n.querySelector('chord') && !n.querySelector('grace')){
+        const fwd = doc.createElement('forward'), d = doc.createElement('duration');
+        d.textContent = dur.textContent;
+        fwd.appendChild(d);
+        n.parentNode.insertBefore(fwd, n);
+      }
+      n.remove();
+    });
+  });
   return new XMLSerializer().serializeToString(doc);
 }
 
@@ -2325,6 +2386,23 @@ function KeyBar({target, refKey, keys, capo, onStep, onSet, imageShown, bassLift
   );
 }
 
+// Stimmen in den gezeichneten Noten ein-/ausblenden; mindestens eine bleibt sichtbar
+function ScoreVoiceBar({names, hidden, onChange}){
+  const visible = names.filter(n=>!hidden.includes(n)).length;
+  return (
+    <div className="score-voices no-print" role="group" aria-label="Stimmen in den Noten">
+      <span className="vp-label">In den Noten</span>
+      <div className="vp-chips">
+        {names.map(n=>{
+          const on = !hidden.includes(n);
+          return <button key={n} className={'vp-chip small'+(on?' on':'')} aria-pressed={on} disabled={on && visible===1}
+            onClick={()=>onChange(on ? [...hidden, n] : hidden.filter(h=>h!==n))}>{n}</button>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
   const [showScores,setShowScores] = useState(false);
@@ -2354,6 +2432,12 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
     const v = !scoresVisible;
     setScoresVisible(v);
     try{ localStorage.setItem(LS_SHOW_SCORES, JSON.stringify(v)); }catch(e){}
+  }
+  const [scoreHidden,setScoreHidden] = useState(()=>{ const m = loadJSON(LS_SCORE_HIDDEN, {}); return (m && Array.isArray(m[song.id])) ? m[song.id] : []; });
+  const scoreVoices = useMemo(()=>song.musicxml ? xmlVoiceNames(song.musicxml) : [], [song.musicxml]);
+  function saveScoreHidden(names){
+    setScoreHidden(names);
+    try{ const m = loadJSON(LS_SCORE_HIDDEN, {}) || {}; if(names.length) m[song.id] = names; else delete m[song.id]; localStorage.setItem(LS_SCORE_HIDDEN, JSON.stringify(m)); }catch(e){}
   }
   const hasVoices = !!(song.voices && song.voices.length);
   const hasMxl = !!song.musicxml;
@@ -2407,10 +2491,12 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
             onStep={stepKey} onSet={saveTarget} bassLifted={bassLifted}
             imageShown={target!==null && scoresVisible && (!hasMxl || useImage) && song.scores && song.scores.length>0} />}
         {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} transpose={shiftVoices} />}
+        {scoresVisible && hasMxl && !useImage && !mxlError && scoreVoices.length>1 &&
+          <ScoreVoiceBar names={scoreVoices} hidden={scoreHidden} onChange={saveScoreHidden} />}
         {scoresVisible && hasScores && <div className="scores-wrap" style={{position:'relative'}}>
           <button className="scores-close no-print" title="Noten ausblenden" aria-label="Noten ausblenden" onClick={toggleScores}>✕</button>
           {hasMxl && !useImage && !mxlError
-            ? <MusicXmlScore xml={song.musicxml} shift={shiftNotes} onFail={setMxlError} />
+            ? <MusicXmlScore xml={song.musicxml} shift={shiftNotes} hidden={scoreHidden} onFail={setMxlError} />
             : <Scores scores={song.scores} onOpen={()=>setShowScores(true)} />}
           {mxlError && <div className="hint" style={{color:'var(--danger)'}}>{mxlError} Es wird das Notenbild gezeigt.</div>}
           {hasMxl && song.scores && song.scores.length>0 && !mxlError &&
