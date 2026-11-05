@@ -322,7 +322,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-05-2';
+const APP_VERSION = '2026-11-05-3';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1841,6 +1841,7 @@ function ListChooser({song, myLists, onToggle, onCreate, onClose}){
 // Der Klang wird mit Web Audio selbst erzeugt – keine Bibliothek, keine Klangdateien.
 const LS_VOICE = 'lyrics-stimme';      // alt: zuletzt gewählte Stimme, wird einmal nach LS_MIX übernommen
 const LS_MIX = 'lyrics-stimmen-mix';   // je Stimmname {on, level}, pro Gerät, gilt für alle Lieder
+const LS_MIX_FOLLOW = 'lyrics-stimmen-wie-noten';   // Mixer zeigt nur die in den Noten eingeblendeten Stimmen (Standard: ja)
 const MIX_DEFAULT = {on:true, level:100};
 const mixOf = (mix, name) => mix[name] || MIX_DEFAULT;
 const mixGain = m => m.on ? Math.pow(m.level/100, 2) : 0;   // quadratisch: klingt gleichmäßiger als linear
@@ -1969,24 +1970,30 @@ function playTone(ctx, dest, midi, t0, dur, nodes){
   [o1,o2].forEach(o=>{ o.start(t0); o.stop(t0+dur+0.05); nodes.add(o); o.onended=()=>nodes.delete(o); });
 }
 
-function VoicePlayer({voices, transpose=0}){
+function VoicePlayer({voices, transpose=0, scoreHidden=[]}){
   const tracks = parsedVoices(voices);
   const [playing,setPlaying] = useState(false);
   const [mix,setMix] = useState(()=>loadMix(tracks));
+  const [follow,setFollow] = useState(()=>loadJSON(LS_MIX_FOLLOW, true)!==false);
   const [tempo,setTempo] = useState(100);          // Prozent des Originaltempos
   const [loop,setLoop] = useState(false);
   const [pos,setPos] = useState(0);                // Position in Schlägen
   const eng = useRef(null);
   const settings = useRef({});
   const bassLift = useMemo(()=>voicesBassLift(voices, transpose), [voices, transpose]);
-  settings.current = {mix, tempo, loop, transpose, bassLift};
+  // In den Noten ausgeblendete Stimmen: nur wenn sie zu den Übungsstimmen passen und eine übrig bleibt
+  const notInScore = tracks.filter(t=>scoreHidden.includes(t.name));
+  const canFollow = notInScore.length>0 && notInScore.length<tracks.length;
+  const shown = follow && canFollow ? tracks.filter(t=>!notInScore.includes(t)) : tracks;
+  settings.current = {mix, shown, tempo, loop, transpose, bassLift};
 
   const total = tracks.length ? Math.max(...tracks.map(t=>t.length)) : 0;
   const baseBpm = tracks.length ? tracks[0].bpm : 100;
   const bpb = tracks.length ? tracks[0].beatsPerBar : 4;
 
   function levels(){
-    return tracks.map(t=>mixGain(mixOf(settings.current.mix, t.name)));
+    const {mix, shown} = settings.current;
+    return tracks.map(t=>shown.includes(t) ? mixGain(mixOf(mix, t.name)) : 0);
   }
 
   function stop(resetPos){
@@ -2043,7 +2050,7 @@ function VoicePlayer({voices, transpose=0}){
   useEffect(()=>{
     const e=eng.current; if(!e) return;
     levels().forEach((v,i)=>e.gains[i].gain.setTargetAtTime(v, e.ctx.currentTime, 0.03));
-  }, [mix]);
+  }, [mix, shown.length]);
   // Tempo geändert: an der aktuellen Stelle neu einsetzen
   useEffect(()=>{ if(eng.current) start(Math.max(0,pos)); }, [tempo]);
   useEffect(()=>()=>stop(false), []);
@@ -2059,10 +2066,14 @@ function VoicePlayer({voices, transpose=0}){
   }
   function allEqual(){
     const next={...mix};
-    tracks.forEach(t=>{ next[t.name]=MIX_DEFAULT; });
+    shown.forEach(t=>{ next[t.name]=MIX_DEFAULT; });
     changeMix(next);
   }
-  const mixed = tracks.some(t=>{ const m=mixOf(mix, t.name); return !m.on || m.level!==100; });
+  function changeFollow(v){
+    setFollow(v);
+    try{ localStorage.setItem(LS_MIX_FOLLOW, JSON.stringify(v)); }catch(e){}
+  }
+  const mixed = shown.some(t=>{ const m=mixOf(mix, t.name); return !m.on || m.level!==100; });
   function seek(beat){
     setPos(beat);
     if(eng.current) start(beat);
@@ -2083,7 +2094,7 @@ function VoicePlayer({voices, transpose=0}){
         value={Math.min(Math.floor(pos/bpb+1e-6)*bpb, (bars-1)*bpb)} aria-label="Takt"
         onChange={ev=>seek(Number(ev.target.value))} />
       <div className="vp-mix" role="group" aria-label="Stimmen">
-        {tracks.map(t=>{
+        {shown.map(t=>{
           const m=mixOf(mix, t.name);
           return (
             <div className="vp-line" key={t.name}>
@@ -2097,6 +2108,7 @@ function VoicePlayer({voices, transpose=0}){
         })}
         {mixed && <button className="vp-link vp-reset" onClick={allEqual}>Alle an, gleich laut</button>}
       </div>
+      {canFollow && <label className="vp-loop"><input type="checkbox" checked={follow} onChange={ev=>changeFollow(ev.target.checked)} /> Nur Stimmen aus den Noten</label>}
       <div className="vp-line">
         <span className="vp-label">Tempo</span>
         <input className="vp-tempo" type="range" min={50} max={130} step={5} value={tempo}
@@ -2490,7 +2502,7 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
           <KeyBar target={target} refKey={refKey} keys={keys} capo={hasChords && chordsVisible ? song.capo : 0}
             onStep={stepKey} onSet={saveTarget} bassLifted={bassLifted}
             imageShown={target!==null && scoresVisible && (!hasMxl || useImage) && song.scores && song.scores.length>0} />}
-        {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} transpose={shiftVoices} />}
+        {practice && hasVoices && <VoicePlayer key={song.id} voices={song.voices} transpose={shiftVoices} scoreHidden={hasMxl ? scoreHidden : []} />}
         {scoresVisible && hasMxl && !useImage && !mxlError && scoreVoices.length>1 &&
           <ScoreVoiceBar names={scoreVoices} hidden={scoreHidden} onChange={saveScoreHidden} />}
         {scoresVisible && hasScores && <div className="scores-wrap" style={{position:'relative'}}>

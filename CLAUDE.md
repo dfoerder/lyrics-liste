@@ -135,7 +135,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `localStorage` `lyrics-akkorde-zeigen` (Akkord-Ansicht an/aus, für alle Lieder) und
   `lyrics-tonart` (`{id: Grundton 0–11}`, gewählte Zieltonart je Lied; fehlt = Original).
 - `localStorage` `lyrics-noten-stimmen` — in den gezeichneten Noten ausgeblendete Stimmen je Lied
-  (`{id: [Namen]}`), Leiste `ScoreVoiceBar` über den Noten; unabhängig vom Mixer der Übungsstimmen.
+  (`{id: [Namen]}`), Leiste `ScoreVoiceBar` über den Noten.
+- `localStorage` `lyrics-stimmen-wie-noten` — Option im `VoicePlayer` „Nur Stimmen aus den Noten“ (Standard
+  an, gilt für alle Lieder): Der Mixer zeigt dann nur die in den Noten eingeblendeten Stimmen, die anderen
+  sind stumm. Der Knopf erscheint nur, wenn ausgeblendete Namen zu den Übungsstimmen passen und eine übrig bleibt.
 - `localStorage` `lyrics-stimmen-mix` — Übungsstimmen je Stimmname `{on, level}` (an/aus, Lautstärke
   5–100 %), gilt für alle Lieder auf dem Gerät; fehlt ein Name: an, 100 %. Der alte Schlüssel
   `lyrics-stimme` wird einmalig übernommen (gewählte Stimme 100 %, andere 50 %) und gelöscht.
