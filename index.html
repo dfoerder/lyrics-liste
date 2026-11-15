@@ -322,7 +322,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-15';
+const APP_VERSION = '2026-11-15-2';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -578,18 +578,28 @@ function analyzeImport(current, incoming){
     else if(stampTime(d.updated) > stampTime(f.updated) || (d.edited && !d.updated)) r.conflicts.push(f.id);
     else r.updated.push(f.id);
   });
+  // Listen: Hat jemand eine mitgeschickte Liste auf dem Gerät geändert und kommt sie anders
+  // wieder, wird gefragt, welche Fassung bleibt.
+  r.listConflicts = (incoming.lists||[]).filter(f=>{
+    const d = current && current.lists.find(x=>x.id===f.id);
+    return d && d.edited && !sameList(d, f);
+  }).map(f=>f.id);
   return r;
+}
+function sameList(a, b){
+  return a.name===b.name && a.songIds.length===b.songIds.length && a.songIds.every((id,i)=>id===b.songIds[i]);
 }
 
 // Import führt zusammen: neue Lieder kommen dazu, gleiche ids werden durch die Fassung
 // aus der Datei ersetzt, alles andere auf dem Gerät bleibt. Listen ebenso nach id.
-function mergeCollection(current, incoming, keepDeviceIds){
+function mergeCollection(current, incoming, keepDeviceIds, keepListIds){
   const keep = new Set(keepDeviceIds||[]);
+  const keepLists = new Set(keepListIds||[]);
   const songs = {...(current ? current.songs : {})};
   Object.values(incoming.songs).forEach(s=>{
     if(!keep.has(s.id)) songs[s.id] = s;
   });
-  const lists = (current ? current.lists : []).map(l=>incoming.lists.find(x=>x.id===l.id) || l);
+  const lists = (current ? current.lists : []).map(l=>keepLists.has(l.id) ? l : incoming.lists.find(x=>x.id===l.id) || l);
   incoming.lists.forEach(l=>{ if(!lists.some(x=>x.id===l.id)) lists.push(l); });
   // Ein Lied, das mit der Datei (wieder) kommt, ist nicht mehr gelöscht
   const trash = {...((current && current.trash) || {})};
@@ -906,7 +916,8 @@ async function saveSongFiles(song){
 async function shareSongs({name, songs, lists}){
   // Selbst bearbeitete Lieder ohne Zeitstempel (vor dieser Funktion bearbeitet) bekommen jetzt einen
   const clean = songs.map(({edited, ...s})=>edited && !s.updated ? {...s, updated: nowStamp()} : s);
-  const data = {type: FILE_TYPE, version: 2, created: new Date().toISOString().slice(0,10), lists: lists||[], songs: clean};
+  const cleanLists = (lists||[]).map(({edited, own, shared, fixed, ...l})=>l);
+  const data = {type: FILE_TYPE, version: 2, created: new Date().toISOString().slice(0,10), lists: cleanLists, songs: clean};
   const slug = slugify(name) || 'lieder';
   const file = new File([JSON.stringify(data)], `lieder-${slug}-${data.created}.json`, {type: 'application/json'});
   const text = `Lieder für die Lyrics-Liste: ${name} (${lieder(clean.length)}). `
@@ -958,6 +969,7 @@ function ShareChooser({collection, myLists, favorites, onShare, onClose}){
 function ImportDialog({collection, pending, onImport, onCancel}){
   const a = useMemo(()=>analyzeImport(collection, pending), [collection, pending]);
   const [useFile,setUseFile] = useState({});          // id -> true = Fassung aus der Datei
+  const [useFileList,setUseFileList] = useState({});  // Listen-id -> true = Liste aus der Datei
   const lists = pending.lists.length;
   const n = Object.keys(pending.songs).length;
   return (
@@ -967,7 +979,7 @@ function ImportDialog({collection, pending, onImport, onCancel}){
         <p>{lieder(n)}{lists ? ` in ${lists} ${lists===1?'Liste':'Listen'}` : ''}
           {pending.created ? ` (Stand ${formatDate(pending.created)})` : ''}.
           {collection && ` ${a.added.length} neu, ${a.updated.length} neuere ${a.updated.length===1?'Fassung':'Fassungen'}, ${a.same.length} unverändert.`
-            + ' Alle anderen Lieder und deine eigenen Listen bleiben erhalten.'}</p>
+            + ' Alle anderen Lieder und Listen bleiben erhalten.'}</p>
         {a.conflicts.length>0 && <React.Fragment>
           <p><strong>Auf diesem Gerät gibt es neuere Fassungen.</strong> Welche möchtest du behalten?</p>
           <div className="conflicts">
@@ -987,9 +999,28 @@ function ImportDialog({collection, pending, onImport, onCancel}){
             })}
           </div>
         </React.Fragment>}
+        {a.listConflicts.length>0 && <React.Fragment>
+          <p><strong>Du hast {a.listConflicts.length===1 ? 'eine Liste' : 'Listen'} auf diesem Gerät geändert</strong>, und die Datei bringt eine andere Fassung mit. Welche soll bleiben?</p>
+          <div className="conflicts">
+            {a.listConflicts.map(id=>{
+              const d = collection.lists.find(l=>l.id===id), f = pending.lists.find(l=>l.id===id), file = !!useFileList[id];
+              return (
+                <div className="conflict" key={id}>
+                  <div className="name">Liste „{d.name}“{f.name!==d.name ? ` / „${f.name}“` : ''}</div>
+                  <div className="choice">
+                    <button className={'btn btn-secondary' + (!file ? ' on' : '')} onClick={()=>setUseFileList({...useFileList, [id]: false})}>
+                      Meine Fassung<br/>{lieder(d.songIds.length)}{d.updated ? `, ${formatStamp(d.updated)}` : ''}</button>
+                    <button className={'btn btn-secondary' + (file ? ' on' : '')} onClick={()=>setUseFileList({...useFileList, [id]: true})}>
+                      Aus der Datei<br/>{lieder(f.songIds.length)}{f.updated ? `, ${formatStamp(f.updated)}` : ''}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </React.Fragment>}
         <div className="dialog-actions">
           <button className="btn btn-secondary" onClick={onCancel}>Abbrechen</button>
-          <button className="btn btn-primary" onClick={()=>onImport(a.conflicts.filter(id=>!useFile[id]))}>Importieren</button>
+          <button className="btn btn-primary" onClick={()=>onImport(a.conflicts.filter(id=>!useFile[id]), a.listConflicts.filter(id=>!useFileList[id]))}>Importieren</button>
         </div>
       </div>
     </div>
@@ -1224,10 +1255,16 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
   );
 }
 
-// Eigene Listen in eigener Reihenfolge, alle anderen alphabetisch
+// Mitgeschickte Liste in der Listenansicht: bearbeitbar wie eine eigene (own), aber als
+// mitgeschickt markiert (shared). Unbearbeitet alphabetisch, nach dem ersten Ändern eigene Reihenfolge.
+function sharedListView(l){
+  return l ? {...l, own: true, shared: true} : null;
+}
+
+// Eigene Listen in eigener Reihenfolge, mitgeschickte alphabetisch, bis sie geändert werden
 function listSongs(list, songs){
   const present = list.songIds.map(id=>songs[id]).filter(Boolean);
-  return list.own ? present : sortSongs(present);
+  return (list.own && !list.shared) || list.edited ? present : sortSongs(present);
 }
 
 function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong, onShare, onClearAll, hasOwnLists}){
@@ -1313,7 +1350,7 @@ function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrin
           <p>„{list.name}“ wird von diesem Gerät gelöscht. Sollen die {lieder(orderedSongs.length)} darin
             in der Sammlung bleiben oder mitgelöscht werden? Mitgelöschte Lieder verschwinden auch aus
             allen anderen Listen; über ⋯ → „Gelöschte wiederherstellen“ auf der Startseite kommen sie
-            zurück{!list.own && ' (samt Liste)'}.{!list.own && ' Eine mitgeschickte Liste kommt mit einer neuen Lieder-Datei wieder.'}</p>
+            zurück{list.shared && ' (samt Liste)'}.{list.shared && ' Eine mitgeschickte Liste kommt mit einer neuen Lieder-Datei wieder.'}</p>
           <div className="dialog-actions" style={{flexWrap:'wrap'}}>
             <button className="btn btn-secondary" onClick={()=>setShowDelete(false)}>Abbrechen</button>
             <button className="btn btn-secondary" onClick={()=>{ setShowDelete(false); onDelete(false); }}>Nur Liste löschen</button>
@@ -1808,7 +1845,7 @@ function ListChooser({song, myLists, onToggle, onCreate, onClose}){
     <div className="overlay" onClick={onClose}>
       <div className="dialog" onClick={e=>e.stopPropagation()}>
         <h3>Zu Liste hinzufügen</h3>
-        <p style={{marginBottom:'.7rem'}}>„{song.title}" in deine eigenen Listen legen. Nochmal antippen nimmt es wieder heraus.</p>
+        <p style={{marginBottom:'.7rem'}}>„{song.title}" in Listen legen. Nochmal antippen nimmt es wieder heraus.</p>
         <div className="picker-list">
           {myLists.map(l=>{
             const on = l.songIds.includes(song.id);
@@ -2253,6 +2290,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
   const bracketsInText = /[\[\]]/.test(cleaned);
   const linkOk = !f.link.trim() || /^https:\/\/\S+$/.test(f.link.trim());
   const [pasteMsg,setPasteMsg] = useState('');
+  const [pasteReplace,setPasteReplace] = useState(null);   // Text, der den vorhandenen ersetzen soll
   async function pasteClipboard(){
     setPasteMsg('');
     let text = '';
@@ -2263,7 +2301,7 @@ function SongEditor({song, onSave, onCancel, onDelete}){
     if(/^https:\/\/\S+$/.test(text)){
       setF(x=>({...x, link: text})); setPasteMsg('Link eingefügt.'); return;
     }
-    if(f.lyrics.trim() && !window.confirm('Den vorhandenen Liedtext durch den Text aus der Zwischenablage ersetzen?')) return;
+    if(f.lyrics.trim()){ setPasteReplace(text); return; }
     setF(x=>({...x, lyrics: cleanLyrics(text)}));
   }
   async function pick(kind, e){
@@ -2315,6 +2353,11 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
           <button className="btn btn-secondary" style={{marginBottom:'.4rem'}} onClick={pasteClipboard}>📋 Aus Zwischenablage einfügen</button>
           {pasteMsg && <div className="hint">{pasteMsg}</div>}
+          {pasteReplace!==null && <Confirm title="Liedtext ersetzen?"
+            message="Im Feld steht schon ein Text. Soll er durch den Text aus der Zwischenablage ersetzt werden?"
+            confirmLabel="Ersetzen" danger
+            onConfirm={()=>{ setF(x=>({...x, lyrics: cleanLyrics(pasteReplace)})); setPasteReplace(null); }}
+            onCancel={()=>setPasteReplace(null)} />}
           <textarea value={f.lyrics} onChange={set('lyrics')} />
           {keptChords < chordCount(chords) && <div className="hint" style={{color:'var(--danger)'}}>Akkorde bleiben nur in Zeilen, deren Text gleich ist: {chordCount(chords)-keptChords} von {chordCount(chords)} fallen beim Speichern weg.</div>}</div>
         <div className="field"><label>Gitarrenakkorde</label>
@@ -2770,7 +2813,10 @@ function App(){
     : activeListId===ALL_ID ? {id: ALL_ID, name: 'Alle Lieder', songIds: Object.keys(songs)}
     : activeListId===FAV_ID ? {id: FAV_ID, name: 'Favoriten', songIds: favorites, own: true, fixed: true}
     : myList ? {...myList, own: true}
-    : collection.lists.find(l=>l.id===activeListId) || null;
+    : sharedListView(collection.lists.find(l=>l.id===activeListId));
+  // Alle Listen (eigene und mitgeschickte), z.B. für „Zu Liste hinzufügen“
+  const allLists = [...(collection ? collection.lists : []), ...myLists]
+    .slice().sort((a,b)=>a.name.localeCompare(b.name, 'de'));
   const activeSong = activeSongId ? songs[activeSongId] : null;
 
   function changeFont(delta){
@@ -2787,8 +2833,8 @@ function App(){
       setImportError(e.message || 'Import fehlgeschlagen.');
     }
   }
-  async function confirmImport(keepDeviceIds){
-    const next = {...mergeCollection(collection, pendingImport, keepDeviceIds), importedAt: new Date().toISOString()};
+  async function confirmImport(keepDeviceIds, keepListIds){
+    const next = {...mergeCollection(collection, pendingImport, keepDeviceIds, keepListIds), importedAt: new Date().toISOString()};
     setPendingImport(null);
     try{
       await saveCollection(next);   // erst speichern, dann anzeigen – bei vollem Speicher bleibt der alte Stand
@@ -2817,7 +2863,22 @@ function App(){
     setListQuery('');
     setPhase('list');
   }
+  // Mitgeschickte Liste ändern: bekommt edited + Zeitstempel, damit ein späterer Import fragt.
+  // Beim ersten Ändern wird die bisher angezeigte (alphabetische) Reihenfolge übernommen.
+  async function updateSharedList(id, change){
+    const lists = collection.lists.map(l=>{
+      if(l.id!==id) return l;
+      const base = l.edited ? l : {...l, songIds: [...sortSongs(l.songIds.map(x=>songs[x]).filter(Boolean)).map(x=>x.id),
+        ...l.songIds.filter(x=>!songs[x])]};
+      return {...change(base), id, edited: true, updated: nowStamp()};
+    });
+    await commit({...collection, lists}, 'Die Liste konnte nicht gespeichert werden.');
+  }
   function toggleSongInList(listId, songId){
+    if(collection && collection.lists.some(l=>l.id===listId)){
+      updateSharedList(listId, l=>({...l, songIds: l.songIds.includes(songId) ? l.songIds.filter(x=>x!==songId) : [...l.songIds, songId]}));
+      return;
+    }
     setMyLists(prev=>prev.map(l=>l.id!==listId ? l : {...l,
       songIds: l.songIds.includes(songId) ? l.songIds.filter(x=>x!==songId) : [...l.songIds, songId]}));
   }
@@ -2860,18 +2921,22 @@ function App(){
   }
   function updateMyList({id, name, songIds}){
     if(id===FAV_ID){ setFavorites(songIds); return; }
+    if(collection && collection.lists.some(l=>l.id===id)){
+      updateSharedList(id, l=>({...l, name, songIds}));
+      return;
+    }
     setMyLists(prev=>prev.map(l=>l.id===id ? {id, name, songIds} : l));
   }
   // Liste löschen (eigene oder mitgeschickte); withSongs löscht auch ihre Lieder vom Gerät.
   async function deleteList(withSongs){
     const list = activeList;
     const songIds = withSongs ? list.songIds.filter(id=>collection.songs[id]) : [];
-    if(!list.own || songIds.length){
+    if(list.shared || songIds.length){
       const trashed = trashSongs(collection, songIds);
       const next = {...trashed, lists: trashed.lists.filter(l=>l.id!==list.id)};
       if(!await commit(next, 'Die Liste konnte nicht gelöscht werden.')) return;
     }
-    if(list.own) setMyLists(prev=>prev.filter(l=>l.id!==list.id));
+    if(!list.shared) setMyLists(prev=>prev.filter(l=>l.id!==list.id));
     goHome();
   }
 
@@ -2892,7 +2957,7 @@ function App(){
       onDelete={deleteList} onShare={share} />;
   }
   else if(phase==='song' && activeSong){
-    view = <SongView key={activeSong.id} song={activeSong} myLists={myLists} onSaveSong={saveSong}
+    view = <SongView key={activeSong.id} song={activeSong} myLists={allLists} onSaveSong={saveSong}
       onDeleteSong={()=>deleteSong(activeSong.id)} onShare={share} onError={setSaveError}
       isFavorite={favorites.includes(activeSong.id)} onToggleFavorite={()=>toggleFavorite(activeSong.id)}
       onBack={()=>{ setActiveSongId(null); setPhase(activeListId ? 'list' : 'home'); }}

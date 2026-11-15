@@ -31,6 +31,15 @@ Entscheid des Besitzers (13.10.2026, Familiengebrauch nach Art. 19 URG):
   mitgelöschte mitgeschickte Listen neu an) und „Gelöschte endgültig entfernen“. Kommt ein
   gelöschtes Lied mit einer Lieder-Datei, verlässt es den Papierkorb.
 
+**Mitgeschickte Listen** (aus einer Lieder-Datei, `collection.lists`) darf jeder auf seinem Gerät
+ändern wie eigene (Entscheid 15.11.2026): Lieder hinzufügen/entfernen/verschieben, umbenennen,
+löschen; sie erscheinen auch in „Zu Liste hinzufügen“ (`ListChooser` bekommt `allLists`). Eine
+Änderung setzt `edited: true` und `updated` (`updateSharedList`; beim ersten Ändern wird die bis
+dahin alphabetische Reihenfolge übernommen, danach gilt die eigene). Kommt die Liste mit einem
+Import anders wieder, fragt `ImportDialog` je Liste, welche Fassung bleibt (`analyzeImport` →
+`listConflicts`, `sameList`, `mergeCollection(…, keepListIds)`). Eine gelöschte mitgeschickte Liste
+kommt mit dem nächsten Import zurück. Beim Weitergeben werden `edited`/`own`/`shared` entfernt.
+
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
 bei einem Import erhalten. Deshalb Lied-ids in der Sammlung nie ändern.
@@ -54,7 +63,7 @@ Geräten sieht, ob die neue Version geladen ist. Mehrere Änderungen am selben T
 - `manifest.webmanifest` + `icons/` — Installierbarkeit (Homescreen)
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
-`{type, version, created, lists:[{id, name, songIds}], songs:[{id, title, writers,
+`{type, version, created, lists:[{id, name, songIds, updated?}], songs:[{id, title, writers,
 performer, year, lyrics, updated?, scores?, voices?, link?, chords?, capo?, musicxml?}]}` — `lists` optional. `scores` = optionale Liste von
 Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
 `voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
@@ -155,9 +164,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Menü ⋯ (importieren, weitergeben, alles entfernen), Stand-Datum
 - `ListView` — oben ein Suchfeld, das nur in den Liedern dieser Liste sucht (`SearchField`/
   `SearchResults`, gleiche Suche wie auf der Startseite; Begriff in `App` `listQuery`, beim
-  Öffnen einer Liste geleert); Lieder einer Liste; mitgeschickte Listen alphabetisch und nur lesen,
-  eigene Listen (`list.own`) in eigener Reihenfolge mit Hinzufügen/Verschieben/
-  Entfernen/Umbenennen/Löschen
+  Öffnen einer Liste geleert); Lieder einer Liste; alle Listen (`list.own`, mitgeschickte zusätzlich
+  `list.shared` über `sharedListView`) mit Hinzufügen/Verschieben/Entfernen/Umbenennen/Löschen;
+  mitgeschickte bis zur ersten Änderung alphabetisch (`listSongs`), danach eigene Reihenfolge
 - `SongPicker` — Lieder aus der Sammlung zu einer eigenen Liste hinzufügen
 - `PromptDialog` — Namenseingabe (neue Liste, umbenennen)
 - `VoicePlayer` — Übungsplayer für `song.voices`: liest die MIDI-Dateien selbst
