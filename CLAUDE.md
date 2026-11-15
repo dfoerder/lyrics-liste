@@ -180,7 +180,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   JPEG mit abgeschnittenem Rand, `pdfToScores`/`trimCanvas`; oder PNG/JPEG unverändert),
   Noten als MusicXML hochladen (`fileToMusicXml`: .musicxml, .xml oder .mxl, Letzteres entpackt
   `mxlToXml` ohne Bibliothek; das Dateifeld hat bewusst kein `accept`, weil iOS die Endung sonst
-  sperren kann), Gitarrenakkorde (`ChordEditor`),
+  sperren kann), Knopf „📋 Aus Zwischenablage einfügen“ über dem Liedtext (`pasteClipboard`: liest
+  `navigator.clipboard.readText`, formatiert mit `cleanLyrics`, fragt vor dem Ersetzen; ein reiner
+  https-Link geht ins Feld Link), Gitarrenakkorde (`ChordEditor`),
   Übungsstimmen hochladen (MIDI, `filesToVoices`: mehrstimmige Datei wird je Spur aufgeteilt,
   sonst Name aus `-s/-a/-t/-b`); speichert über `saveSong` in IndexedDB, Verwerfen mit
   Rückfrage, „Lied löschen“ (`deleteSong`)

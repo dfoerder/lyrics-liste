@@ -322,7 +322,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-05-3';
+const APP_VERSION = '2026-11-15';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -2252,6 +2252,20 @@ function SongEditor({song, onSave, onCancel, onDelete}){
   const keptChords = chords ? chordCount(reconcileChords(chords, cleaned)) : 0;
   const bracketsInText = /[\[\]]/.test(cleaned);
   const linkOk = !f.link.trim() || /^https:\/\/\S+$/.test(f.link.trim());
+  const [pasteMsg,setPasteMsg] = useState('');
+  async function pasteClipboard(){
+    setPasteMsg('');
+    let text = '';
+    try{ text = await navigator.clipboard.readText(); }
+    catch(e){ setPasteMsg('Kein Zugriff auf die Zwischenablage. Bitte lange ins Textfeld drücken und „Einsetzen“ wählen.'); return; }
+    text = (text || '').trim();
+    if(!text){ setPasteMsg('Die Zwischenablage ist leer.'); return; }
+    if(/^https:\/\/\S+$/.test(text)){
+      setF(x=>({...x, link: text})); setPasteMsg('Link eingefügt.'); return;
+    }
+    if(f.lyrics.trim() && !window.confirm('Den vorhandenen Liedtext durch den Text aus der Zwischenablage ersetzen?')) return;
+    setF(x=>({...x, lyrics: cleanLyrics(text)}));
+  }
   async function pick(kind, e){
     const files = [...e.target.files]; e.target.value = '';
     if(!files.length) return;
@@ -2299,6 +2313,8 @@ function SongEditor({song, onSave, onCancel, onDelete}){
         </div>
         <div className="field"><label>Songwriter</label><input value={f.writers} onChange={set('writers')} /></div>
         <div className="field"><label>Liedtext (Strophen durch eine Leerzeile trennen)</label>
+          <button className="btn btn-secondary" style={{marginBottom:'.4rem'}} onClick={pasteClipboard}>📋 Aus Zwischenablage einfügen</button>
+          {pasteMsg && <div className="hint">{pasteMsg}</div>}
           <textarea value={f.lyrics} onChange={set('lyrics')} />
           {keptChords < chordCount(chords) && <div className="hint" style={{color:'var(--danger)'}}>Akkorde bleiben nur in Zeilen, deren Text gleich ist: {chordCount(chords)-keptChords} von {chordCount(chords)} fallen beim Speichern weg.</div>}</div>
         <div className="field"><label>Gitarrenakkorde</label>
