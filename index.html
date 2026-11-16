@@ -323,7 +323,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-16';
+const APP_VERSION = '2026-11-16-2';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -2613,12 +2613,13 @@ function PrintView({list, songs, onBack, fontIndex, onFontChange}){
 }
 
 // ---------- Bug-Melder (zum Testen; Einschalten: 5× auf die Versionszeile tippen oder ?bugs=1)
-// Bugs liegen in localStorage 'lyrics-bugs' und werden per Mail verschickt (mailto: öffnet die
-// Mail-App mit fertigem Text). Die Empfängeradresse steht bewusst nicht im Code (App ist
-// öffentlich), sondern wird pro Gerät im Melder eingetragen ('lyrics-bug-mail').
+// Bugs liegen in localStorage 'lyrics-bugs' und werden als GitHub-Issue gemeldet: der Melder öffnet
+// ein vorausgefülltes Issue, dort nur noch „Submit new issue" tippen (GitHub-Konto nötig). Kein Token
+// im Code (App ist öffentlich). Issues sind öffentlich: nie Liedtext mitschicken, nur Titel/Ansicht.
+// Feld 'mailed' heisst aus Kompatibilität mit alten Einträgen weiter so (= gesendet).
 const LS_BUGMODE = 'lyrics-bugmode';
 const LS_BUGS = 'lyrics-bugs';
-const LS_BUG_MAIL = 'lyrics-bug-mail';
+const BUG_ISSUE_URL = 'https://github.com/dfoerder/lyrics-liste/issues/new';
 const BUG_KINDS = [{id:'bug', label:'🐞 Fehler'}, {id:'feature', label:'💡 Neues Feature'}];
 const BUG_SEVS = [{id:'blocker', label:'🔴 Blockiert'}, {id:'major', label:'🟠 Stört'}, {id:'minor', label:'🟡 Kosmetik'}];
 
@@ -2677,22 +2678,23 @@ function BugReporter(){
   const [sev,setSev] = useState('major');
   const [kind,setKind] = useState('bug');
   const [ctx,setCtx] = useState(null);
-  const [mail,setMail] = useState(()=>{ try{ return localStorage.getItem(LS_BUG_MAIL)||''; }catch(e){ return ''; } });
   const [msg,setMsg] = useState('');
   const [showList,setShowList] = useState(false);
   const [confirm,setConfirm] = useState(null);   // 'hide' | 'clear' | {del: id}
   const openCount = list.filter(b=>!b.mailed).length;
   const persist = l => { setList(l); try{ localStorage.setItem(LS_BUGS, JSON.stringify(l)); }catch(e){} };
-  const saveMail = v => { setMail(v); try{ v ? localStorage.setItem(LS_BUG_MAIL, v) : localStorage.removeItem(LS_BUG_MAIL); }catch(e){} };
 
   function openMail(bugs, l){
     const one = bugs.length===1 && (bugs[0].kind==='feature' ? 'Feature-Wunsch – ' : 'Bug – ') + bugs[0].text.slice(0,50);
-    const subject = `Lyrics-Liste: ${one || bugs.length + ' Meldungen'}`;
-    const href = `mailto:${encodeURIComponent(mail.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bugMailBody(bugs))}`;
+    const subject = one || bugs.length + ' Meldungen';
+    let body = bugMailBody(bugs);
+    if(body.length > 6000) body = body.slice(0, 6000) + '\n… (gekürzt)';
+    const labels = bugs.every(b=>b.kind==='feature') ? 'enhancement' : 'bug';
+    const href = `${BUG_ISSUE_URL}?labels=${labels}&title=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     const ids = new Set(bugs.map(b=>b.id));
     persist(l.map(b=>ids.has(b.id) ? {...b, mailed: new Date().toISOString()} : b));
-    setMsg('Mail-App geöffnet – dort nur noch senden.' + (mail.trim() ? '' : ' Empfänger fehlt: unten eintragen oder in der Mail ergänzen.'));
-    window.location.href = href;
+    setMsg('GitHub-Issue geöffnet – dort nur noch „Submit new issue" tippen.');
+    window.open(href, '_blank');
   }
   function save(alsoMail){
     const body = text.trim();
@@ -2703,7 +2705,7 @@ function BugReporter(){
     persist(next);
     setText('');
     if(alsoMail) openMail([bug], next);
-    else setMsg(`✓ Gespeichert (${next.filter(b=>!b.mailed).length} noch nicht gemailt)`);
+    else setMsg(`✓ Gespeichert (${next.filter(b=>!b.mailed).length} noch nicht gesendet)`);
   }
 
   if(!open) return (
@@ -2728,22 +2730,17 @@ function BugReporter(){
           placeholder={kind==='feature' ? 'Was soll die App können? z.B. Lieder nach Jahr sortieren' : 'Was ist passiert? z.B. Nach dem Import fehlt die Liste Weihnachten'} />
         <div className="dialog-actions" style={{marginTop:'.7rem'}}>
           <button className="btn btn-secondary" onClick={()=>save(false)}>Nur speichern</button>
-          <button className="btn btn-primary" onClick={()=>save(true)}>Per Mail senden</button>
+          <button className="btn btn-primary" onClick={()=>save(true)}>Als GitHub-Issue senden</button>
         </div>
         {msg && <div className="bug-msg">{msg}</div>}
-        <div className="field" style={{marginTop:'.8rem'}}>
-          <label>Mail an (wird auf diesem Gerät gemerkt)</label>
-          <input type="email" value={mail} onChange={e=>saveMail(e.target.value)} placeholder="name@beispiel.ch"
-            autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-        </div>
-        <button className="btn btn-secondary" style={{width:'100%'}} onClick={()=>setShowList(!showList)}>
-          {showList ? '▾' : '▸'} Gemeldete Bugs ({list.length}{openCount ? `, ${openCount} nicht gemailt` : ''})</button>
+        <button className="btn btn-secondary" style={{width:'100%', marginTop:'.8rem'}} onClick={()=>setShowList(!showList)}>
+          {showList ? '▾' : '▸'} Gemeldete Bugs ({list.length}{openCount ? `, ${openCount} nicht gesendet` : ''})</button>
         {showList && <div style={{marginTop:'.5rem'}}>
           {list.map(b=>(
             <div className="bug-item" key={b.id}>
               <span>{b.kind==='feature' ? '💡' : (BUG_SEVS.find(s=>s.id===b.sev) || BUG_SEVS[1]).label.split(' ')[0]}</span>
               <div className="txt">{b.text}
-                <div className="meta">{new Date(b.ts).toLocaleString('de-CH')} · {b.mailed ? '✓ gemailt' : 'nicht gemailt'}</div></div>
+                <div className="meta">{new Date(b.ts).toLocaleString('de-CH')} · {b.mailed ? '✓ gesendet' : 'nicht gesendet'}</div></div>
               {confirm && confirm.del===b.id
                 ? <span><button onClick={()=>{ persist(list.filter(x=>x.id!==b.id)); setConfirm(null); }}>Löschen</button>
                     <button onClick={()=>setConfirm(null)}>Nein</button></span>
@@ -2751,8 +2748,8 @@ function BugReporter(){
             </div>
           ))}
           <div className="dialog-actions" style={{marginTop:'.6rem', flexWrap:'wrap'}}>
-            {openCount>0 && <button className="btn btn-secondary" onClick={()=>openMail(list.filter(b=>!b.mailed), list)}>Alle nicht gemailten senden</button>}
-            {list.some(b=>b.mailed) && <button className="btn btn-secondary" onClick={()=>setConfirm('clear')}>Gemailte löschen</button>}
+            {openCount>0 && <button className="btn btn-secondary" onClick={()=>openMail(list.filter(b=>!b.mailed), list)}>Alle nicht gesendeten senden</button>}
+            {list.some(b=>b.mailed) && <button className="btn btn-secondary" onClick={()=>setConfirm('clear')}>Gesendete löschen</button>}
             <button className="btn btn-secondary" onClick={()=>setConfirm('hide')}>Melder ausblenden</button>
           </div>
         </div>}
@@ -2760,7 +2757,7 @@ function BugReporter(){
           <button className="btn btn-secondary" onClick={close}>Schliessen</button>
         </div>
       </div>
-      {confirm==='clear' && <Confirm title="Gemailte Bugs löschen?" message="Bugs, deren Mail schon geöffnet wurde, werden aus der Liste entfernt."
+      {confirm==='clear' && <Confirm title="Gesendete Bugs löschen?" message="Bugs, die schon als GitHub-Issue geöffnet wurden, werden aus der Liste entfernt."
         confirmLabel="Löschen" danger onConfirm={()=>{ persist(list.filter(b=>!b.mailed)); setConfirm(null); }} onCancel={()=>setConfirm(null)} />}
       {confirm==='hide' && <Confirm title="Bug-Melder ausblenden?" message="Wieder einschalten: unten auf der Startseite fünfmal auf die Versionszeile tippen. Die gespeicherten Bugs bleiben."
         confirmLabel="Ausblenden" onConfirm={()=>{ try{ localStorage.removeItem(LS_BUGMODE); }catch(e){} location.reload(); }} onCancel={()=>setConfirm(null)} />}

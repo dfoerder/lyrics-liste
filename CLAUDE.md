@@ -248,9 +248,10 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - **Art:** 🐞 Fehler (mit Schwere) oder 💡 Neues Feature (`kind`).
 - **Erfasst:** Text, Schwere, Ansicht (`window.__bugCtx`: phase, Liste, Liedtitel – nie
   Liedtext), App-Version, Gerät, letzte JS-Fehler (`window.__bugLog`, früher Script im `<head>`).
-- **Versand per Mail:** „Per Mail senden“ öffnet `mailto:` mit Betreff und Text. Die
-  Empfängeradresse steht bewusst **nicht** im Code (App ist öffentlich), sondern wird im Melder
-  pro Gerät eingetragen (`lyrics-bug-mail`). Bugs liegen in `lyrics-bugs`, „gemailt“ markiert.
+- **Versand als GitHub-Issue:** „Als GitHub-Issue senden“ öffnet ein vorausgefülltes Issue in
+  `dfoerder/lyrics-liste` (Label `bug` bzw. `enhancement`), dort „Submit new issue“ tippen (GitHub-
+  Konto nötig). Kein Token im Code. Issues sind öffentlich – nie Liedtext mitschicken. Bugs liegen
+  in `lyrics-bugs`, Gesendete mit `mailed` markiert (Feldname aus Kompatibilität).
 
 ## Copyright / CCLI
 
