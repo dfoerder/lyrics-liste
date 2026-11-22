@@ -232,6 +232,9 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   `scoresToPdf`. Braucht OSMD (beim ersten Mal Internet). Verweigert iOS das Teilen, weil das
   Zeichnen zu lange dauerte (`NotAllowedError`), gibt `shareFiles` `{retry}` zurück und `SongView`
   zeigt „Dateien sind bereit“ mit Knopf „Teilen“.
+  Ist die Akkord-Ansicht an (🎸, `chordsVisible`), kommt `name-akkorde-<tonart>.pdf` dazu
+  (`chordSheetToPdf`: Akkordblatt wie `ChordSheet`, Akkorde transponiert über der Silbe, Wörter
+  brechen nie, Untertitel „Akkorde in X · Kapo N“; Canvas-Zeichnung, ohne Griffbilder).
 - `ShareChooser` / `shareSongs` — ⋯ → „Lieder weitergeben“ auf der Startseite (Alle Lieder, Favoriten, eine Liste)
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
