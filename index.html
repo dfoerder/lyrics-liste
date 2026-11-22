@@ -205,6 +205,10 @@ a.btn{display:inline-block;text-decoration:none}
 .picker-item .check{width:1.3rem;height:1.3rem;border:1.5px solid var(--border2);border-radius:.35rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;color:var(--on-accent)}
 .picker-item.on .check{background:var(--accent);border-color:var(--accent)}
 .picker-item.new-list{color:var(--accent-dark);font-weight:600}
+.tag-cats{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem}
+.tag-chip{border:1px solid var(--border2);background:var(--bg-card);color:var(--text);border-radius:999px;padding:.35rem .8rem;font-size:.88rem;font-family:inherit}
+.tag-chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.tag-chip.new{border-style:dashed;color:var(--accent-dark);font-weight:600}
 .new-list-row{display:flex;gap:.5rem;padding:.6rem;border-bottom:1px solid var(--border)}
 .new-list-row input{flex:1;min-width:0;padding:.5rem .6rem;border:1px solid var(--border2);border-radius:.5rem;font-family:inherit;font-size:1rem;color:var(--text);background:var(--bg-card)}
 .song-lists{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;margin:-.3rem 0 1rem}
@@ -323,7 +327,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-16-2';
+const APP_VERSION = '2026-11-22';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -543,6 +547,8 @@ function parseCollection(text){
     if(/^https:\/\/\S+$/.test(str(s.link))) songs[id].link = str(s.link);
     if(str(s.updated) && !isNaN(Date.parse(str(s.updated)))) songs[id].updated = str(s.updated);
     if(typeof s.musicxml==='string' && /<score-partwise/.test(s.musicxml.slice(0,3000))) songs[id].musicxml = s.musicxml;
+    const tags = (Array.isArray(s.tags) ? s.tags : []).map(str).filter(Boolean);
+    if(tags.length) songs[id].tags = [...new Set(tags)];
     if(str(s.chords) && cleanLyrics(stripChords(str(s.chords))) === songs[id].lyrics){
       songs[id].chords = str(s.chords).replace(/\r\n/g,'\n');
       const capo = parseInt(s.capo, 10);
@@ -553,7 +559,12 @@ function parseCollection(text){
   const lists = (Array.isArray(data.lists) ? data.lists : [])
     .filter(l=>l && str(l.id) && str(l.name) && Array.isArray(l.songIds))
     .map(l=>({id: str(l.id), name: str(l.name), songIds: l.songIds.map(str).filter(id=>songs[id])}));
-  return {created: str(data.created), lists, songs};
+  const tagCategories = (Array.isArray(data.tagCategories) ? data.tagCategories : [])
+    .filter(c=>c && str(c.id) && str(c.name)).map(c=>({id: str(c.id), name: str(c.name)}));
+  const tags = (Array.isArray(data.tags) ? data.tags : [])
+    .filter(t=>t && str(t.id) && str(t.name) && str(t.categoryId))
+    .map(t=>({id: str(t.id), name: str(t.name), categoryId: str(t.categoryId)}));
+  return {created: str(data.created), lists, songs, tagCategories, tags};
 }
 
 // Zeitstempel der Textfassung (UTC, sekundengenau) – damit lässt sich beim Import erkennen,
@@ -598,14 +609,24 @@ function mergeCollection(current, incoming, keepDeviceIds, keepListIds){
   const keepLists = new Set(keepListIds||[]);
   const songs = {...(current ? current.songs : {})};
   Object.values(incoming.songs).forEach(s=>{
-    if(!keep.has(s.id)) songs[s.id] = s;
+    // Tags werden zusammengeführt (Datei + Gerät), auch wenn die Fassung auf dem Gerät bleibt
+    const d = songs[s.id];
+    const tags = [...new Set([...((d && d.tags) || []), ...(s.tags || [])])];
+    const next = keep.has(s.id) ? d : {...s};
+    if(!next) return;
+    songs[s.id] = tags.length ? {...next, tags} : next;
   });
   const lists = (current ? current.lists : []).map(l=>keepLists.has(l.id) ? l : incoming.lists.find(x=>x.id===l.id) || l);
   incoming.lists.forEach(l=>{ if(!lists.some(x=>x.id===l.id)) lists.push(l); });
   // Ein Lied, das mit der Datei (wieder) kommt, ist nicht mehr gelöscht
   const trash = {...((current && current.trash) || {})};
   Object.keys(incoming.songs).forEach(id=>{ if(!keep.has(id)) delete trash[id]; });
-  return {created: incoming.created || (current && current.created) || '', lists, songs, trash};
+  // Tag-Kategorien und Tags nach id zusammenführen; vorhandene (evtl. umbenannte) bleiben
+  const tagCategories = [...((current && current.tagCategories) || [])];
+  (incoming.tagCategories || []).forEach(c=>{ if(!tagCategories.some(x=>x.id===c.id)) tagCategories.push(c); });
+  const tags = [...((current && current.tags) || [])];
+  (incoming.tags || []).forEach(t=>{ if(!tags.some(x=>x.id===t.id)) tags.push(t); });
+  return {created: incoming.created || (current && current.created) || '', lists, songs, trash, tagCategories, tags};
 }
 
 function slugify(s){
@@ -914,11 +935,19 @@ async function saveSongFiles(song){
   }
 }
 
-async function shareSongs({name, songs, lists}){
+async function shareSongs({name, songs, lists, collection}){
   // Selbst bearbeitete Lieder ohne Zeitstempel (vor dieser Funktion bearbeitet) bekommen jetzt einen
   const clean = songs.map(({edited, ...s})=>edited && !s.updated ? {...s, updated: nowStamp()} : s);
   const cleanLists = (lists||[]).map(({edited, own, shared, fixed, ...l})=>l);
   const data = {type: FILE_TYPE, version: 2, created: new Date().toISOString().slice(0,10), lists: cleanLists, songs: clean};
+  // Nur die Tags der mitgeschickten Lieder (samt Kategorien) mitgeben
+  const usedTags = new Set(clean.flatMap(x=>x.tags || []));
+  const tags = ((collection && collection.tags) || []).filter(t=>usedTags.has(t.id));
+  if(tags.length){
+    const cats = new Set(tags.map(t=>t.categoryId));
+    data.tags = tags;
+    data.tagCategories = collection.tagCategories.filter(c=>cats.has(c.id));
+  }
   const slug = slugify(name) || 'lieder';
   const file = new File([JSON.stringify(data)], `lieder-${slug}-${data.created}.json`, {type: 'application/json'});
   const text = `Lieder für die Lyrics-Liste: ${name} (${lieder(clean.length)}). `
@@ -1111,6 +1140,127 @@ function Header({title, onBack, right}){
   );
 }
 
+// ---------------------------------------------------------------- Tags
+// collection.tagCategories = [{id, name}], collection.tags = [{id, name, categoryId}],
+// song.tags = [Tag-id]. Tags reisen mit der Lieder-Datei mit und werden beim Import vereinigt.
+function tagCats(coll){ return (coll && coll.tagCategories) || []; }
+function tagList(coll){ return (coll && coll.tags) || []; }
+function byName(a, b){ return a.name.localeCompare(b.name, 'de'); }
+function uniqueId(base, taken){
+  let id = base, n = 2;
+  while(taken.has(id)) id = base + '-' + (n++);
+  return id;
+}
+function tagSongIds(coll, tagId){
+  return Object.values(coll.songs).filter(x=>(x.tags || []).includes(tagId)).map(x=>x.id);
+}
+function setSongTags(coll, songId, tags){
+  const song = {...coll.songs[songId]};
+  if(tags.length) song.tags = tags; else delete song.tags;
+  return {...coll, songs: {...coll.songs, [songId]: song}};
+}
+function stripTags(coll, tagIds){
+  const drop = new Set(tagIds);
+  const songs = {...coll.songs};
+  Object.values(songs).forEach(x=>{
+    if(!(x.tags || []).some(t=>drop.has(t))) return;
+    const tags = x.tags.filter(t=>!drop.has(t));
+    const n = {...x}; if(tags.length) n.tags = tags; else delete n.tags;
+    songs[x.id] = n;
+  });
+  return {...coll, songs};
+}
+function songTagNames(coll, song){
+  const all = tagList(coll);
+  return (song.tags || []).map(id=>all.find(t=>t.id===id)).filter(Boolean).sort(byName).map(t=>t.name);
+}
+
+// Tags eines Liedes wählen: oben die Kategorien, darunter deren Tags zum Antippen
+function TagChooser({collection, song, onToggle, onCreateCategory, onCreateTag, onClose}){
+  const cats = tagCats(collection).slice().sort(byName);
+  const [catId,setCatId] = useState(()=>{
+    const first = tagList(collection).find(t=>(song.tags || []).includes(t.id));
+    return first ? first.categoryId : (cats[0] && cats[0].id);
+  });
+  const [newCat,setNewCat] = useState(false);
+  const [newTag,setNewTag] = useState(false);
+  const cat = cats.find(c=>c.id===catId);
+  const tags = tagList(collection).filter(t=>t.categoryId===catId).sort(byName);
+  const names = songTagNames(collection, song);
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="dialog" onClick={e=>e.stopPropagation()}>
+        <h3>Tags</h3>
+        <p style={{marginBottom:'.6rem'}}>„{song.title}“{names.length ? ': ' + names.join(', ') : ' hat noch keine Tags.'}</p>
+        <div className="tag-cats">
+          {cats.map(c=>(
+            <button key={c.id} className={'tag-chip' + (c.id===catId ? ' on' : '')} onClick={()=>setCatId(c.id)}>{c.name}</button>
+          ))}
+          <button className="tag-chip new" onClick={()=>setNewCat(true)}>+ Kategorie</button>
+        </div>
+        {cat ? <div className="picker-list">
+            {tags.map(t=>{
+              const on = (song.tags || []).includes(t.id);
+              return (
+                <div key={t.id} className={'picker-item choice' + (on ? ' on' : '')} onClick={()=>onToggle(t.id)}>
+                  <span className="check">{on ? '✓' : ''}</span><span>{t.name}</span>
+                </div>
+              );
+            })}
+            <div className="picker-item new-list" onClick={()=>setNewTag(true)}>+ Neuer Tag in „{cat.name}“</div>
+          </div>
+          : <p className="hint">Lege zuerst eine Kategorie an, z.B. „Thema“ oder „Anlass“.</p>}
+        <div className="dialog-actions" style={{marginTop:'1rem'}}>
+          <button className="btn btn-primary" onClick={onClose}>Fertig</button>
+        </div>
+      </div>
+      {newCat && <PromptDialog title="Neue Kategorie" label="Name der Kategorie" placeholder="z.B. Thema"
+        confirmLabel="Anlegen"
+        onSubmit={async name=>{ setNewCat(false); const id = await onCreateCategory(name); if(id) setCatId(id); }}
+        onCancel={()=>setNewCat(false)} />}
+      {newTag && <PromptDialog title="Neuer Tag" label={`Tag in „${cat.name}“`} placeholder="z.B. Dank"
+        confirmLabel="Anlegen"
+        onSubmit={async name=>{ setNewTag(false); const id = await onCreateTag(catId, name); if(id && !(song.tags || []).includes(id)) onToggle(id); }}
+        onCancel={()=>setNewTag(false)} />}
+    </div>
+  );
+}
+
+// Eine Kategorie: ihre Tags mit Anzahl Lieder
+function TagCategoryView({collection, category, onBack, onOpenTag, onCreateTag, onRename, onDelete}){
+  const [showNew,setShowNew] = useState(false);
+  const [showRename,setShowRename] = useState(false);
+  const [showDelete,setShowDelete] = useState(false);
+  const tags = tagList(collection).filter(t=>t.categoryId===category.id).sort(byName);
+  return (
+    <React.Fragment>
+      <Header title={category.name} onBack={onBack} right={
+        <ActionMenu items={[
+          {label: '+ Neuer Tag', onClick: ()=>setShowNew(true)},
+          {label: '✎ Kategorie umbenennen', onClick: ()=>setShowRename(true)},
+          {label: '🗑 Kategorie löschen', onClick: ()=>setShowDelete(true)}
+        ]} />} />
+      <div className="main">
+        <div className="section-label">Tags</div>
+        {tags.length===0 && <div className="empty">Noch keine Tags in dieser Kategorie.</div>}
+        {tags.map(t=>(
+          <ListCard key={t.id} list={t} count={tagSongIds(collection, t.id).length} onOpen={()=>onOpenTag(t.id)} />
+        ))}
+        <button className="btn-new-list" onClick={()=>setShowNew(true)}>+ Neuer Tag</button>
+      </div>
+      {showNew && <PromptDialog title="Neuer Tag" label={`Tag in „${category.name}“`} placeholder="z.B. Dank"
+        confirmLabel="Anlegen" onSubmit={name=>{ setShowNew(false); onCreateTag(category.id, name); }}
+        onCancel={()=>setShowNew(false)} />}
+      {showRename && <PromptDialog title="Kategorie umbenennen" label="Name der Kategorie" initialValue={category.name}
+        onSubmit={name=>{ setShowRename(false); onRename(name); }} onCancel={()=>setShowRename(false)} />}
+      {showDelete && <Confirm title="Kategorie löschen?"
+        message={`„${category.name}“ und ${tags.length===1 ? 'ihr Tag' : `ihre ${tags.length} Tags`} werden gelöscht und bei allen Liedern entfernt. Die Lieder selbst bleiben.`}
+        confirmLabel="Löschen" danger
+        onConfirm={()=>{ setShowDelete(false); onDelete(); }} onCancel={()=>setShowDelete(false)} />}
+    </React.Fragment>
+  );
+}
+
 function ListCard({list, count, onOpen}){
   return (
     <div className="card">
@@ -1163,8 +1313,9 @@ function ClearAllConfirm({hasOwnLists, onConfirm, onCancel}){
     confirmLabel="Entfernen" danger onConfirm={onConfirm} onCancel={onCancel} />;
 }
 
-function HomeView({collection, myLists, favorites, theme, onThemeChange, onRestore, onPurge, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList}){
+function HomeView({collection, myLists, favorites, theme, onThemeChange, onRestore, onPurge, query, onQueryChange, onOpenSong, onShare, onNewSong, onOpenList, onImportFile, onClear, onCreateMyList, onOpenTagCategory, onCreateCategory}){
   const [showClear,setShowClear] = useState(false);
+  const [showNewCat,setShowNewCat] = useState(false);
   const [showNewList,setShowNewList] = useState(false);
   const [showShare,setShowShare] = useState(false);
   const [showRestore,setShowRestore] = useState(false);
@@ -1232,6 +1383,20 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
                 onOpen={()=>onOpenList(l.id)} />
             ))}
             <button className="btn-new-list" onClick={()=>setShowNewList(true)}>+ Neue Liste</button>
+            <div className="section-label">Tag-Kategorien</div>
+            {tagCats(collection).slice().sort(byName).map(c=>{
+              const n = tagList(collection).filter(t=>t.categoryId===c.id).length;
+              return (
+                <div className="card" key={c.id}>
+                  <div className="card-row" onClick={()=>onOpenTagCategory(c.id)}>
+                    <div className="title">🏷 {c.name}</div>
+                    <div className="sub">{n===1 ? '1 Tag' : `${n} Tags`}</div>
+                    <div className="chev">&#8250;</div>
+                  </div>
+                </div>
+              );
+            })}
+            <button className="btn-new-list" onClick={()=>setShowNewCat(true)}>+ Neue Tag-Kategorie</button>
             <VersionTap>Stand Lieder: {formatDate(collection.created || collection.importedAt)} · App-Version: {formatVersion(APP_VERSION)}</VersionTap>
           </React.Fragment>}
       </div>
@@ -1248,6 +1413,10 @@ function HomeView({collection, myLists, favorites, theme, onThemeChange, onResto
       {showShare && <ShareChooser collection={collection} myLists={myLists} favorites={favorites}
         onShare={sel=>{ setShowShare(false); onShare(sel); }}
         onClose={()=>setShowShare(false)} />}
+      {showNewCat && <PromptDialog title="Neue Tag-Kategorie" label="Name der Kategorie" placeholder="z.B. Thema, Anlass, Kirchenjahr"
+        confirmLabel="Anlegen"
+        onSubmit={async name=>{ setShowNewCat(false); const id = await onCreateCategory(name); if(id) onOpenTagCategory(id); }}
+        onCancel={()=>setShowNewCat(false)} />}
       {showNewList && <PromptDialog title="Neue Liste" label="Name der Liste" placeholder="z.B. Meine Lieblingslieder"
         confirmLabel="Anlegen"
         onSubmit={name=>{ setShowNewList(false); onCreateMyList(name); }}
@@ -1268,7 +1437,7 @@ function listSongs(list, songs){
   return (list.own && !list.shared) || list.edited ? present : sortSongs(present);
 }
 
-function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong, onShare, onClearAll, hasOwnLists}){
+function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrint, onUpdate, onDelete, onNewSong, onShare, onClearAll, hasOwnLists, extraItems, extra}){
   const [showPicker,setShowPicker] = useState(false);
   const [showRename,setShowRename] = useState(false);
   const [showDelete,setShowDelete] = useState(false);
@@ -1301,7 +1470,8 @@ function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrin
             lists: list.id===ALL_ID || list.id===FAV_ID ? [] : [{id: list.id, name: list.name, songIds: orderedSongs.map(s=>s.id)}]})},
           list.own && !list.fixed && {label: '✎ Liste umbenennen', onClick: ()=>setShowRename(true)},
           !list.fixed && list.id!==ALL_ID && {label: '🗑 Liste löschen', onClick: ()=>setShowDelete(true)},
-          list.id===ALL_ID && orderedSongs.length>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)}
+          list.id===ALL_ID && orderedSongs.length>0 && {label: '🗑 Alle Lieder entfernen', onClick: ()=>setShowClear(true)},
+          ...(extraItems || [])
         ]} />} />
       <div className="main">
         {orderedSongs.length>0 && <SearchField query={query} onChange={onQueryChange}
@@ -1313,7 +1483,8 @@ function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrin
             ? '1 Lied dieser Liste ist gerade nicht in der Sammlung. Kommt es mit einer neuen Lieder-Datei zurück, erscheint es wieder.'
             : `${missing} Lieder dieser Liste sind gerade nicht in der Sammlung. Kommen sie mit einer neuen Lieder-Datei zurück, erscheinen sie wieder.`}</div>}
         {orderedSongs.length===0 && <div className="empty">
-          {list.id===FAV_ID ? 'Noch keine Favoriten. Im Lied oben rechts ⋯ → „☆ Zu Favoriten“.'
+          {list.tag ? 'Noch keine Lieder mit diesem Tag. Im Lied oben rechts ⋯ → „🏷 Tags“.'
+            : list.id===FAV_ID ? 'Noch keine Favoriten. Im Lied oben rechts ⋯ → „☆ Zu Favoriten“.'
             : list.own ? 'Noch keine Lieder in dieser Liste.' : 'Diese Liste enthält keine Lieder.'}
           {list.own && <div><button className="btn btn-primary" onClick={()=>setShowPicker(true)}>+ Lieder hinzufügen</button></div>}</div>}
         <ul className="song-list">
@@ -1339,6 +1510,7 @@ function ListView({list, songs, query, onQueryChange, onBack, onOpenSong, onPrin
       </div>
       {showClear && <ClearAllConfirm hasOwnLists={hasOwnLists}
         onConfirm={()=>{ setShowClear(false); onClearAll(); }} onCancel={()=>setShowClear(false)} />}
+      {extra}
       {showPicker && <SongPicker songs={songs} excludeIds={list.songIds}
         onPick={id=>onUpdate({...list, songIds:[...list.songIds, id]})}
         onClose={()=>setShowPicker(false)} />}
@@ -2475,8 +2647,9 @@ function ScoreVoiceBar({names, hidden, onChange}){
   );
 }
 
-function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
+function SongView({song, collection, tagActions, myLists, onSaveSong, onDeleteSong, onShare, onError, isFavorite, onToggleFavorite, onBack, fontIndex, onFontChange, onToggleList, onCreateListWithSong}){
   const [showChooser,setShowChooser] = useState(false);
+  const [showTags,setShowTags] = useState(false);
   const [showScores,setShowScores] = useState(false);
   const [editing,setEditing] = useState(false);
   const [practice,setPractice] = useState(false);
@@ -2524,6 +2697,7 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
     || (practice && hasVoices && voicesBassLift(song.voices, shiftVoices))), [song, shiftNotes, shiftVoices, scoresVisible, useImage, practice]);
   const hasScores = !!(song.scores && song.scores.length) || hasMxl;
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
+  const tagNames = songTagNames(collection, song);
   if(editing){
     return <SongEditor song={song} onCancel={()=>setEditing(false)} onDelete={onDeleteSong}
       onSave={async s=>{ const ok = await onSaveSong(s); if(ok) setEditing(false); return ok; }} />;
@@ -2536,6 +2710,7 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
           <ActionMenu items={[
             {label: isFavorite ? '★ Aus Favoriten entfernen' : '☆ Zu Favoriten', onClick: onToggleFavorite},
             {label: '+ Zu Liste hinzufügen', onClick: ()=>setShowChooser(true)},
+            {label: '🏷 Tags', onClick: ()=>setShowTags(true)},
             hasScores && {label: scoresVisible ? '♪ Noten ausblenden' : '♪ Noten einblenden', onClick: toggleScores},
             hasChords && {label: chordsVisible ? '🎸 Akkorde ausblenden' : '🎸 Akkorde anzeigen', onClick: toggleChords},
             hasVoices && {label: practice ? '♫ Stimmen üben schliessen' : '♫ Stimmen üben', onClick: ()=>setPractice(!practice)},
@@ -2550,8 +2725,9 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
         {song.link && <div className="song-lists no-print">
           <a className="btn btn-secondary" href={song.link} target="_blank" rel="noopener noreferrer">&#9654; Song spielen</a>
         </div>}
-        {(isFavorite || inLists.length>0 || song.edited) && <div className="song-status no-print">
+        {(isFavorite || inLists.length>0 || song.edited || tagNames.length>0) && <div className="song-status no-print">
           {[isFavorite && '★ Favorit', inLists.length>0 && 'In: ' + inLists.join(', '),
+            tagNames.length>0 && '🏷 ' + tagNames.join(', '),
             song.edited && 'auf diesem Gerät bearbeitet'].filter(Boolean).join(' · ')}</div>}
         {((hasScores && !scoresVisible) || hasVoices || hasChords) && <div className="note-tools no-print">
           {hasScores && !scoresVisible && <button title="Noten anzeigen" aria-label="Noten anzeigen" onClick={toggleScores}>♪</button>}
@@ -2581,6 +2757,10 @@ function SongView({song, myLists, onSaveSong, onDeleteSong, onShare, onError, is
         {song.updated && <div className="text-stamp">Textstand {formatStamp(song.updated)}</div>}
       </div>
       {showScores && <ScoreViewer scores={song.scores} title={song.title} onClose={()=>setShowScores(false)} />}
+      {showTags && <TagChooser collection={collection} song={song}
+        onToggle={tagId=>tagActions.toggle(song.id, tagId)}
+        onCreateCategory={tagActions.createCategory} onCreateTag={tagActions.createTag}
+        onClose={()=>setShowTags(false)} />}
       {showChooser && <ListChooser song={song} myLists={myLists}
         onToggle={listId=>onToggleList(listId, song.id)}
         onCreate={name=>onCreateListWithSong(name, song.id)}
@@ -2767,6 +2947,7 @@ function BugReporter(){
 
 function App(){
   const [collection,setCollection] = useState(undefined);   // undefined = wird noch geladen
+  const collRef = useRef(collection); collRef.current = collection;
   const [myLists,setMyLists] = useState(()=>loadJSON(LS_MY_LISTS, []));
   const [favorites,setFavorites] = useState(()=>{
     const f = loadJSON(LS_FAVORITES, []);
@@ -2781,6 +2962,10 @@ function App(){
   const [activeSongId,setActiveSongId] = useState(null);
   const [searchQuery,setSearchQuery] = useState('');
   const [listQuery,setListQuery] = useState('');   // Suche innerhalb der geöffneten Liste
+  const [activeCatId,setActiveCatId] = useState(null);
+   // geöffnete Tag-Kategorie
+  const [saveAsList,setSaveAsList] = useState(null);     // {name, songIds, existing} – Tag als Liste speichern
+  const [tagEdit,setTagEdit] = useState(null);           // 'rename' | 'delete' für den geöffneten Tag
   const [theme,setTheme] = useState(()=>{ const m = loadJSON(LS_THEME, 'auto'); return THEMES[m] ? m : 'auto'; });
   useEffect(()=>{
     applyTheme(theme);
@@ -2815,13 +3000,79 @@ function App(){
   // Alle Listen (eigene und mitgeschickte), z.B. für „Zu Liste hinzufügen“
   const allLists = [...(collection ? collection.lists : []), ...myLists]
     .slice().sort((a,b)=>a.name.localeCompare(b.name, 'de'));
+  const activeTagId = activeListId && activeListId.startsWith('tag:') ? activeListId.slice(4) : null;
+  const activeTag = activeTagId ? tagList(collection).find(t=>t.id===activeTagId) : null;
+  const tagView = activeTag ? {id: activeListId, name: activeTag.name, songIds: tagSongIds(collection, activeTag.id), tag: true, fixed: true} : null;
+  const activeCat = activeCatId ? tagCats(collection).find(c=>c.id===activeCatId) : null;
   const activeSong = activeSongId ? songs[activeSongId] : null;
 
   function changeFont(delta){
     setFontIndex(i=>Math.min(FONT_SCALES.length-1, Math.max(0, i+delta)));
   }
   function goHome(){
-    setActiveListId(null); setActiveSongId(null); setPhase('home');
+    setActiveListId(null); setActiveSongId(null); setActiveCatId(null); setPhase('home');
+  }
+  // ---- Tags (immer auf collRef.current aufbauen: „Neuer Tag“ + sofortiges Ankreuzen folgen
+  // direkt aufeinander, bevor React neu zeichnet)
+  async function createCategory(name){
+    const n = name.trim(); if(!n) return null;
+    const cats = tagCats(collRef.current);
+    const same = cats.find(c=>c.name.toLowerCase()===n.toLowerCase());
+    if(same) return same.id;
+    const id = uniqueId('kat-' + (slugify(n) || 'x'), new Set(cats.map(c=>c.id)));
+    return await commit({...collRef.current, tagCategories: [...cats, {id, name: n}]}, 'Die Kategorie konnte nicht gespeichert werden.') ? id : null;
+  }
+  async function createTag(categoryId, name){
+    const n = name.trim(); if(!n) return null;
+    const tags = tagList(collRef.current);
+    const same = tags.find(t=>t.categoryId===categoryId && t.name.toLowerCase()===n.toLowerCase());
+    if(same) return same.id;
+    const cat = tagCats(collRef.current).find(c=>c.id===categoryId);
+    const id = uniqueId('tag-' + slugify(cat ? cat.name : 'x') + '-' + (slugify(n) || 'x'), new Set(tags.map(t=>t.id)));
+    return await commit({...collRef.current, tags: [...tags, {id, name: n, categoryId}]}, 'Der Tag konnte nicht gespeichert werden.') ? id : null;
+  }
+  async function toggleSongTag(songId, tagId){
+    const c = collRef.current, cur = c.songs[songId].tags || [];
+    await commit(setSongTags(c, songId, cur.includes(tagId) ? cur.filter(t=>t!==tagId) : [...cur, tagId]), 'Der Tag konnte nicht gespeichert werden.');
+  }
+  async function renameCategory(name){
+    await commit({...collRef.current, tagCategories: tagCats(collRef.current).map(c=>c.id===activeCatId ? {...c, name: name.trim()} : c)}, 'Umbenennen hat nicht geklappt.');
+  }
+  async function deleteCategory(){
+    const ids = tagList(collRef.current).filter(t=>t.categoryId===activeCatId).map(t=>t.id);
+    const next = stripTags(collRef.current, ids);
+    if(!await commit({...next, tagCategories: tagCats(collRef.current).filter(c=>c.id!==activeCatId),
+      tags: tagList(collRef.current).filter(t=>t.categoryId!==activeCatId)}, 'Löschen hat nicht geklappt.')) return;
+    goHome();
+  }
+  async function renameTag(name){
+    await commit({...collRef.current, tags: tagList(collRef.current).map(t=>t.id===activeTagId ? {...t, name: name.trim()} : t)}, 'Umbenennen hat nicht geklappt.');
+  }
+  async function deleteTag(){
+    const next = stripTags(collRef.current, [activeTagId]);
+    if(!await commit({...next, tags: tagList(collRef.current).filter(t=>t.id!==activeTagId)}, 'Löschen hat nicht geklappt.')) return;
+    setActiveListId(null); setPhase('tagcat');
+  }
+  // Tag → gleichnamige Liste. Gibt es die Liste schon, werden fehlende Lieder ergänzt.
+  function askSaveTagAsList(){
+    const ids = sortSongs(tagView.songIds.map(id=>songs[id]).filter(Boolean)).map(x=>x.id);
+    const existing = allLists.find(l=>l.name.toLowerCase()===tagView.name.toLowerCase()) || null;
+    setSaveAsList({name: tagView.name, songIds: ids, existing});
+  }
+  function saveTagAsList(){
+    const {name, songIds, existing} = saveAsList;
+    setSaveAsList(null);
+    let id;
+    if(existing){
+      id = existing.id;
+      const add = songIds.filter(x=>!existing.songIds.includes(x));
+      if(collection.lists.some(l=>l.id===id)) updateSharedList(id, l=>({...l, songIds: [...l.songIds, ...add]}));
+      else setMyLists(prev=>prev.map(l=>l.id===id ? {...l, songIds: [...l.songIds, ...add]} : l));
+    }else{
+      id = uid();
+      setMyLists(prev=>[...prev, {id, name, songIds}]);
+    }
+    setActiveCatId(null); setActiveListId(id); setListQuery(''); setPhase('list');
   }
   async function handleImportFile(file){
     try{
@@ -2898,6 +3149,7 @@ function App(){
   async function commit(next, errMsg){
     try{ await saveCollection(next); }
     catch(e){ setSaveError(e.message || errMsg); return false; }
+    collRef.current = next;
     setCollection(next);
     return true;
   }
@@ -2907,7 +3159,7 @@ function App(){
     setPhase(activeListId ? 'list' : 'home');
   }
   async function share(sel){
-    try{ await shareSongs(sel); }
+    try{ await shareSongs({...sel, collection}); }
     catch(e){ setSaveError('Weitergeben hat nicht geklappt: ' + (e.message || e)); }
   }
   function newSong(){
@@ -2943,7 +3195,38 @@ function App(){
   }
 
   let view;
-  if(phase==='list' && activeList){
+  if(phase==='list' && tagView){
+    view = <ListView list={tagView} songs={songs}
+      query={listQuery} onQueryChange={setListQuery}
+      onBack={()=>{ setActiveListId(null); setPhase(activeCat ? 'tagcat' : 'home'); }}
+      onOpenSong={id=>{ setActiveSongId(id); setPhase('song'); }}
+      onPrint={()=>setPhase('print')} onShare={share}
+      extraItems={[
+        tagView.songIds.length>0 && {label: '📋 Als Liste speichern', onClick: askSaveTagAsList},
+        {label: '✎ Tag umbenennen', onClick: ()=>setTagEdit('rename')},
+        {label: '🗑 Tag löschen', onClick: ()=>setTagEdit('delete')}
+      ]}
+      extra={<React.Fragment>
+        {saveAsList && <Confirm title="Als Liste speichern?"
+          message={saveAsList.existing
+            ? `Die Liste „${saveAsList.existing.name}“ gibt es schon. Die ${lieder(saveAsList.songIds.filter(x=>!saveAsList.existing.songIds.includes(x)).length)} mit diesem Tag, die noch fehlen, werden hinten angefügt.`
+            : `Es entsteht die Liste „${saveAsList.name}“ mit ${lieder(saveAsList.songIds.length)}. Sie ändert sich danach nicht mehr mit dem Tag mit.`}
+          confirmLabel={saveAsList.existing ? 'Ergänzen' : 'Liste anlegen'}
+          onConfirm={saveTagAsList} onCancel={()=>setSaveAsList(null)} />}
+        {tagEdit==='rename' && <PromptDialog title="Tag umbenennen" label="Name des Tags" initialValue={tagView.name}
+          onSubmit={name=>{ setTagEdit(null); renameTag(name); }} onCancel={()=>setTagEdit(null)} />}
+        {tagEdit==='delete' && <Confirm title="Tag löschen?"
+          message={`„${tagView.name}“ wird bei ${lieder(tagView.songIds.length)} entfernt und gelöscht. Die Lieder selbst bleiben.`}
+          confirmLabel="Löschen" danger
+          onConfirm={()=>{ setTagEdit(null); deleteTag(); }} onCancel={()=>setTagEdit(null)} />}
+      </React.Fragment>} />;
+  }
+  else if(phase==='tagcat' && activeCat){
+    view = <TagCategoryView collection={collection} category={activeCat} onBack={goHome}
+      onOpenTag={id=>{ setActiveListId('tag:' + id); setListQuery(''); setPhase('list'); }}
+      onCreateTag={createTag} onRename={renameCategory} onDelete={deleteCategory} />;
+  }
+  else if(phase==='list' && activeList){
     view = <ListView list={activeList} songs={songs}
       query={listQuery} onQueryChange={setListQuery}
       onClearAll={clearAll} hasOwnLists={myLists.length>0}
@@ -2955,7 +3238,8 @@ function App(){
       onDelete={deleteList} onShare={share} />;
   }
   else if(phase==='song' && activeSong){
-    view = <SongView key={activeSong.id} song={activeSong} myLists={allLists} onSaveSong={saveSong}
+    view = <SongView key={activeSong.id} song={activeSong} collection={collection}
+      tagActions={{toggle: toggleSongTag, createCategory, createTag}} myLists={allLists} onSaveSong={saveSong}
       onDeleteSong={()=>deleteSong(activeSong.id)} onShare={share} onError={setSaveError}
       isFavorite={favorites.includes(activeSong.id)} onToggleFavorite={()=>toggleFavorite(activeSong.id)}
       onBack={()=>{ setActiveSongId(null); setPhase(activeListId ? 'list' : 'home'); }}
@@ -2967,8 +3251,8 @@ function App(){
       onCancel={()=>setPhase(activeListId ? 'list' : 'home')}
       onSave={async s=>{ const ok = await saveSong(s); if(ok){ setActiveSongId(s.id); setPhase('song'); } return ok; }} />;
   }
-  else if(phase==='print' && activeList){
-    view = <PrintView list={activeList} songs={songs} onBack={()=>setPhase('list')}
+  else if(phase==='print' && (tagView || activeList)){
+    view = <PrintView list={tagView || activeList} songs={songs} onBack={()=>setPhase('list')}
       fontIndex={fontIndex} onFontChange={changeFont} />;
   }
   else {
@@ -2980,7 +3264,9 @@ function App(){
       onOpenList={id=>{ setActiveListId(id); setListQuery(''); setPhase('list'); }}
       onImportFile={handleImportFile}
       onClear={clearAll}
-      onCreateMyList={createMyList} />;
+      onCreateMyList={createMyList}
+      onOpenTagCategory={id=>{ setActiveCatId(id); setActiveListId(null); setPhase('tagcat'); }}
+      onCreateCategory={createCategory} />;
   }
 
   window.__bugCtx = {phase, list: activeList ? activeList.name : '', song: activeSong ? activeSong.title : ''};

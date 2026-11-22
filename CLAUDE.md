@@ -40,6 +40,19 @@ Import anders wieder, fragt `ImportDialog` je Liste, welche Fassung bleibt (`ana
 `listConflicts`, `sameList`, `mergeCollection(…, keepListIds)`). Eine gelöschte mitgeschickte Liste
 kommt mit dem nächsten Import zurück. Beim Weitergeben werden `edited`/`own`/`shared` entfernt.
 
+**Tags** (Entscheid 22.11.2026): Lieder können Tags haben, jeder Tag gehört zu einer
+Tag-Kategorie. `collection.tagCategories = [{id, name}]` (id `kat-<slug>`), `collection.tags =
+[{id, name, categoryId}]` (id `tag-<kategorie>-<name>`), `song.tags = [Tag-id]`. Startseite:
+Abschnitt „Tag-Kategorien“ + „Neue Tag-Kategorie“ → `TagCategoryView` (Tags mit Anzahl, neuer Tag,
+Kategorie umbenennen/löschen) → Tag öffnet eine Ansicht wie eine Liste (`activeListId` `tag:<id>`,
+`tagView`, nur lesen) mit ⋯ „Als Liste speichern“ (eigene Liste gleichen Namens mit den Liedern,
+alphabetisch; gibt es die Liste schon, werden fehlende Lieder angefügt), Tag umbenennen/löschen.
+Im Lied ⋯ → „🏷 Tags“ (`TagChooser`: Kategorie wählen oder anlegen, Tags ankreuzen oder anlegen);
+Tags stehen in der Statuszeile. Taggen ändert weder `edited` noch `updated`. Tags reisen mit der
+Lieder-Datei (`shareSongs` gibt nur die benutzten Tags samt Kategorien mit); beim Import werden
+Tags je Lied vereinigt (auch wenn die Gerätefassung bleibt), Definitionen nach id ergänzt,
+vorhandene (evtl. umbenannte) bleiben. Tag-Funktionen bauen auf `collRef.current` auf.
+
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
 bei einem Import erhalten. Deshalb Lied-ids in der Sammlung nie ändern.
@@ -63,8 +76,9 @@ Geräten sieht, ob die neue Version geladen ist. Mehrere Änderungen am selben T
 - `manifest.webmanifest` + `icons/` — Installierbarkeit (Homescreen)
 
 **Import-Datei** (`type: "lyrics-liste-sammlung"`, `version: 2`):
-`{type, version, created, lists:[{id, name, songIds, updated?}], songs:[{id, title, writers,
-performer, year, lyrics, updated?, scores?, voices?, link?, chords?, capo?, musicxml?}]}` — `lists` optional. `scores` = optionale Liste von
+`{type, version, created, lists:[{id, name, songIds, updated?}], tagCategories?:[{id, name}],
+tags?:[{id, name, categoryId}], songs:[{id, title, writers,
+performer, year, lyrics, updated?, scores?, voices?, link?, chords?, capo?, musicxml?, tags?}]}` — `lists` optional. `scores` = optionale Liste von
 Notenbildern als data-URI (`data:image/gif|png|jpeg;base64,…`), unverändert eingebettet.
 `voices` = optionale Übungsstimmen `[{name, midi}]`, `midi` als data-URI
 (`data:audio/midi;base64,…`), Reihenfolge Sopran, Alt, Tenor, Bass. Ältere App-Stände

@@ -82,6 +82,9 @@ FELDER:
   übernehmen, nicht selbst suchen oder raten. Die App zeigt dafür „▶ Song spielen“.
 - lists: optional. Jede Liste nennt die ids ihrer Lieder. Jede id in songIds
   muss in songs existieren.
+- tags (je Lied), tagCategories und tags (oben): optional, kommen aus der App
+  ({id, name} bzw. {id, name, categoryId}; ein Lied nennt die ids seiner Tags).
+  Unverändert übernehmen.
 
 REGELN:
 1. Ich gebe dir immer die aktuelle Datei mit. Übernimm ALLE bestehenden Lieder
