@@ -128,7 +128,11 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
   Silben zählt `syllable_starts`, passt eine Zeile nicht, bricht es mit Strophe und Zeile ab.
 - `lieder.py uebernehmen <datei> [--alle | --id …] [--liste …]` — Datei aus der App (von der
   Familie weitergegeben) mit der Sammlung vergleichen: NEU/GEÄNDERT anzeigen (ohne Texte) und
-  auf Wunsch übernehmen, auch Akkorde und MusicXML (nur wenn die Datei sie hat).
+  auf Wunsch übernehmen, auch Akkorde und MusicXML (nur wenn die Datei sie hat). **Tags:** neue
+  Tags eines Liedes werden angezeigt und mit `--alle`/`--id` vereinigt (Mac + App, nie entfernt),
+  auch wenn die Mac-Fassung neuer ist (Text bleibt dann); Definitionen ergänzt `merge_tag_defs`.
+  `aus-ordner` und `hinzufuegen` behalten vorhandene Tags; `uebersicht` zeigt Tags je Lied und je
+  Kategorie (`tag_names`); `validate` meldet unbekannte Tags/Kategorien; `export` gibt sie mit.
 - Skills `/lied-hinzufuegen` und `/lieder-verschicken` (`.claude/skills/`) nutzen
   das Skript. Versand per WhatsApp wird nur vorbereitet, gesendet wird vom Nutzer.
 - `lieder-prompt.md` — Alternative für ein Claude-Projekt in der Claude-App.

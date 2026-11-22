@@ -115,6 +115,31 @@ def find_list(data, name):
     return None
 
 
+def tag_names(data, song):
+    """Tags eines Liedes als „Kategorie: Name“, alphabetisch."""
+    cats = {c['id']: c['name'] for c in data.get('tagCategories', [])}
+    tags = {t['id']: t for t in data.get('tags', [])}
+    return sorted(f'{cats.get(tags[i]["categoryId"], "?")}: {tags[i]["name"]}' for i in song.get('tags', []) if i in tags)
+
+
+def merge_tag_defs(data, incoming, tag_ids):
+    """Tag-Definitionen (und ihre Kategorien) aus der App-Datei ergänzen; vorhandene bleiben."""
+    new_tags = [t for t in incoming.get('tags') or [] if t.get('id') in tag_ids]
+    if not new_tags:
+        return
+    have_tags = {t['id'] for t in data.setdefault('tags', [])}
+    have_cats = {c['id'] for c in data.setdefault('tagCategories', [])}
+    for t in new_tags:
+        if t['id'] not in have_tags:
+            data['tags'].append({'id': t['id'], 'name': t['name'], 'categoryId': t['categoryId']})
+            have_tags.add(t['id'])
+    need = {t['categoryId'] for t in new_tags}
+    for c in incoming.get('tagCategories') or []:
+        if c.get('id') in need and c['id'] not in have_cats:
+            data['tagCategories'].append({'id': c['id'], 'name': c['name']})
+            have_cats.add(c['id'])
+
+
 def slugify(text):
     text = text.replace('ß', 'ss')
     for a, b in (('ä', 'ae'), ('ö', 'oe'), ('ü', 'ue'), ('Ä', 'Ae'), ('Ö', 'Oe'), ('Ü', 'Ue')):
@@ -431,6 +456,8 @@ def cmd_hinzufuegen(args, data):
         song['link'] = check_link(link)
     if keep.get('musicxml'):
         song['musicxml'] = keep['musicxml']
+    if keep.get('tags'):
+        song['tags'] = keep['tags']
     if keep.get('chords'):
         if strip_chords(keep['chords']) == lyrics:
             song['chords'] = keep['chords']
@@ -741,9 +768,14 @@ def cmd_uebersicht(args, data):
               + (f' | Akkorde: {chords_info(s)}' if s.get('chords') else '')
               + (f' | MusicXML: {len(s["musicxml"].encode()) // 1024} KB' if s.get('musicxml') else '')
               + (' | Link' if s.get('link') else '')
-              + (f' | Listen: {", ".join(lists)}' if lists else ''))
+              + (f' | Listen: {", ".join(lists)}' if lists else '')
+              + (f' | Tags: {", ".join(tag_names(data, s))}' if s.get('tags') else ''))
     for l in data['lists']:
         print(f'Liste "{l["name"]}": {lieder(len(l["songIds"]))}')
+    for c in sorted(data.get('tagCategories', []), key=lambda c: c['name'].casefold()):
+        tags = sorted((t for t in data.get('tags', []) if t['categoryId'] == c['id']), key=lambda t: t['name'].casefold())
+        parts = [f'{t["name"]} ({sum(t["id"] in s.get("tags", []) for s in data["songs"])})' for t in tags]
+        print(f'Tag-Kategorie "{c["name"]}": ' + (', '.join(parts) or 'keine Tags'))
     return False
 
 
@@ -802,6 +834,15 @@ def validate(data):
         for i in l['songIds']:
             if i not in ids:
                 problems.append(f'Liste "{l["name"]}" enthält unbekannte id {i}')
+    cat_ids = {c['id'] for c in data.get('tagCategories', [])}
+    tag_ids = {t['id'] for t in data.get('tags', [])}
+    for t in data.get('tags', []):
+        if t['categoryId'] not in cat_ids:
+            problems.append(f'Tag "{t["name"]}" gehört zu keiner bekannten Kategorie')
+    for s in data['songs']:
+        for i in s.get('tags', []):
+            if i not in tag_ids:
+                problems.append(f'{song_line(s)}: unbekannter Tag {i}')
     return problems
 
 
@@ -1186,6 +1227,8 @@ def cmd_aus_ordner(args, data):
             song['capo'] = capo
     if existing and existing.get('musicxml'):
         song['musicxml'] = existing['musicxml']
+    if existing and existing.get('tags'):
+        song['tags'] = existing['tags']   # Tags kommen aus der App und bleiben beim Neu-Einlesen
     if not g.get('akkorde') and existing and existing.get('chords') and strip_chords(existing['chords']) == lyrics:
         song['chords'] = existing['chords']
         if existing.get('capo'):
@@ -1318,9 +1361,13 @@ def cmd_uebernehmen(args, data):
             continue
         diffs = [name for key, name in APP_FIELDS if (s.get(key) or '') != (old.get(key) or '')]
         diffs += [name for key, name in APP_EXTRAS if s.get(key) and s[key] != old.get(key)]
+        new_tags = [t for t in s.get('tags') or [] if t not in old.get('tags', [])]
+        # Nur neue Tags sind keine neuere Fassung – sie kommen auch dazu, wenn der Mac neuer ist
+        if diffs and stamp_time(old.get('updated')) > stamp_time(s.get('updated')):
+            diffs.append('MAC_NEUER')
+        if new_tags:
+            diffs.append('Tags')
         if diffs:
-            if stamp_time(old.get('updated')) > stamp_time(s.get('updated')):
-                diffs.append('MAC_NEUER')
             changed.append((s, old, diffs))
         else:
             same += 1
@@ -1343,8 +1390,14 @@ def cmd_uebernehmen(args, data):
             else:
                 info.append(f'{name}: „{old.get(key) or "–"}“ → „{s.get(key) or "–"}“')
         info += [name for _, name in APP_EXTRAS if name in diffs]
+        if 'Tags' in diffs:
+            tag_def = {t.get('id'): t for t in incoming.get('tags') or []}
+            names = [tag_def.get(t, {}).get('name', t) for t in s.get('tags') or [] if t not in old.get('tags', [])]
+            info.append('neue Tags: ' + ', '.join(names))
         when = f' | Fassung App {s.get("updated") or "ohne Zeitstempel"}, Mac {old.get("updated") or "ohne Zeitstempel"}'
-        warn = ' | ACHTUNG: die Fassung auf dem Mac ist neuer – bei --alle übergangen, nur mit --id' if 'MAC_NEUER' in diffs else ''
+        warn = (' | ACHTUNG: die Fassung auf dem Mac ist neuer – bei --alle übergangen'
+                + (' (die neuen Tags kommen trotzdem dazu)' if 'Tags' in diffs else '') + ', nur mit --id'
+                if 'MAC_NEUER' in diffs else '')
         print(f'  GEÄNDERT: [{s["id"]}] {song_line(old)}: ' + '; '.join(info) + when + warn)
     if not (args.alle or wanted):
         if new or changed:
@@ -1358,12 +1411,23 @@ def cmd_uebernehmen(args, data):
             for extra in ('scores', 'voices', 'link', 'chords', 'capo', 'musicxml'):
                 if s.get(extra):
                     song[extra] = s[extra]
+            if s.get('tags'):
+                song['tags'] = list(dict.fromkeys(s['tags']))
+                merge_tag_defs(data, incoming, set(song['tags']))
             data['songs'].append(song)
             for name in args.liste or []:
                 add_to_list(data, name, [song['id']])
             print(f'Übernommen (neu): {song_line(song)}' + (f' → Listen: {", ".join(args.liste)}' if args.liste else ''))
             applied += 1
     for s, old, diffs in changed:
+        if (s['id'] in wanted or args.alle) and 'Tags' in diffs:
+            # Tags vereinigen (Mac + App); Text und Angaben bleiben davon unberührt
+            old['tags'] = list(dict.fromkeys(old.get('tags', []) + list(s['tags'])))
+            merge_tag_defs(data, incoming, set(old['tags']))
+            if diffs == ['Tags'] or 'MAC_NEUER' in diffs and s['id'] not in wanted:
+                print(f'Übernommen (Tags): {song_line(old)}: {", ".join(tag_names(data, old))}')
+                applied += 1
+                continue
         if s['id'] in wanted or (args.alle and 'MAC_NEUER' not in diffs):
             for key, _ in APP_FIELDS:
                 old[key] = s.get(key) or ''
