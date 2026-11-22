@@ -327,7 +327,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-22-2';
+const APP_VERSION = '2026-11-22-3';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -909,30 +909,85 @@ async function scoresToPdf(scores){
   return out;
 }
 
+// MusicXML-Partitur als PDF (A4 hoch), gezeichnet wie in der Liedansicht: in der gewählten Tonart
+// und ohne ausgeblendete Stimmen (xml kommt schon so vorbereitet). Titel steht über der ersten Seite.
+function loadImage(src){
+  return new Promise((res, rej)=>{ const i = new Image(); i.onload = ()=>res(i); i.onerror = ()=>rej(new Error('Notenseite konnte nicht gezeichnet werden.')); i.src = src; });
+}
+async function musicXmlToPdf(xml, title){
+  const lib = await loadOsmd();
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const root = doc.documentElement;
+  [...root.children].filter(e=>['work', 'movement-number', 'movement-title'].includes(e.tagName)).forEach(e=>e.remove());
+  const mt = doc.createElement('movement-title'); mt.textContent = title;
+  root.insertBefore(mt, root.firstElementChild);
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:820px;background:#fff;color:#000';
+  document.body.appendChild(host);
+  try{
+    const osmd = new lib.OpenSheetMusicDisplay(host, {
+      backend: 'svg', autoResize: false, pageFormat: 'A4_P', pageBackgroundColor: '#FFFFFF',
+      drawTitle: true, drawSubtitle: false, drawComposer: false, drawLyricist: false, drawCredits: false,
+      drawPartNames: false, drawMeasureNumbers: false
+    });
+    await osmd.load(new XMLSerializer().serializeToString(doc));
+    osmd.render();
+    const pages = [];
+    for(const svg of host.querySelectorAll('svg')){
+      const box = svg.getBoundingClientRect();
+      const w = box.width || svg.width.baseVal.value, h = box.height || svg.height.baseVal.value;
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      svg.setAttribute('width', w); svg.setAttribute('height', h);
+      const img = await loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg)));
+      const c = document.createElement('canvas');
+      c.width = 1190; c.height = Math.round(1190 * h / w);   // 1190 px = 595 pt = A4-Breite in scoresToPdf
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,c.width,c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      pages.push(c.toDataURL('image/jpeg', 0.92));
+    }
+    if(!pages.length) throw new Error('Die Noten ergaben keine Seite.');
+    return await scoresToPdf(pages);
+  }finally{ host.remove(); }
+}
+
 // Lied als Dateien wie im Ordner privat/data auf dem Mac: name.txt (Kopf „Titel, Person, Jahr“,
-// Link-Zeile, Text), name.pdf (Noten), name.mid (alle Stimmen)
-async function songFiles(song){
+// Link-Zeile, Text), name.pdf (Noten), name.mid (alle Stimmen); mit mxl {xml, key} zusätzlich die
+// gezeichnete MusicXML-Partitur als name-noten-<tonart>.pdf
+async function songFiles(song, mxl){
   const base = slugify(song.title) || 'lied';
   const person = (song.performer || song.writers || '').replace(/\s*,\s*/g, ' / ');
   const head = [song.title, person, song.year].filter(Boolean).join(', ');
   const txt = [head, '', ...(song.link ? [song.link, ''] : []), song.lyrics || ''].join('\n') + '\n';
   const files = [new File([txt], base + '.txt', {type: 'text/plain'})];
   if(song.scores && song.scores.length) files.push(new File([await scoresToPdf(song.scores)], base + '.pdf', {type: 'application/pdf'}));
+  if(mxl && mxl.xml){
+    const pdf = await musicXmlToPdf(mxl.xml, mxl.key ? `${song.title} (${mxl.key})` : song.title);
+    files.push(new File([pdf], base + '-noten' + (mxl.key ? '-' + slugify(mxl.key) : '') + '.pdf', {type: 'application/pdf'}));
+  }
   if(song.voices && song.voices.length) files.push(new File([voicesToMidi(song.voices)], base + '.mid', {type: 'audio/midi'}));
   return files;
 }
-async function saveSongFiles(song){
-  const files = await songFiles(song);
+// Gibt 'retry' zurück, wenn iOS das Teilen verweigert, weil das Vorbereiten (Noten zeichnen) zu lange
+// dauerte – dann muss ein zweiter Tipp (shareFiles) das Teilen-Fenster öffnen.
+async function saveSongFiles(song, mxl){
+  const files = await songFiles(song, mxl);
+  return shareFiles(files, song.title);
+}
+async function shareFiles(files, title){
   if(navigator.canShare && navigator.canShare({files})){
-    try{ await navigator.share({files, title: song.title}); }
-    catch(e){ if(e.name!=='AbortError') throw e; }
-    return;
+    try{ await navigator.share({files, title}); }
+    catch(e){
+      if(e.name==='NotAllowedError') return {retry: files};
+      if(e.name!=='AbortError') throw e;
+    }
+    return null;
   }
   for(const f of files){
     const url = URL.createObjectURL(f), a = document.createElement('a');
     a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url), 2000);
   }
+  return null;
 }
 
 async function shareSongs({name, songs, lists, collection}){
@@ -2715,6 +2770,24 @@ function SongView({song, collection, tagActions, myLists, onSaveSong, onDeleteSo
   const hasScores = !!(song.scores && song.scores.length) || hasMxl;
   const inLists = myLists.filter(l=>l.songIds.includes(song.id)).map(l=>l.name);
   const tagNames = songTagNames(collection, song);
+  // Tonart der gezeichneten Noten (wie in der KeyBar) für „Als Dateien sichern“
+  const notesKeyLabel = keys.notes ? keyLabel(target===null ? keys.notes : {pc: target, minor: keys.notes.minor}) : '';
+  const [saving,setSaving] = useState(false);
+  const [shareRetry,setShareRetry] = useState(null);
+  async function saveFiles(){
+    setSaving(true);
+    try{
+      let mxl = null;
+      if(hasMxl){
+        let xml = song.musicxml;
+        try{ xml = hideXmlVoices(transposeXml(song.musicxml, shiftNotes), scoreHidden); }catch(e){}
+        mxl = {xml, key: notesKeyLabel};
+      }
+      const r = await saveSongFiles(song, mxl);
+      if(r && r.retry) setShareRetry(r.retry);
+    }catch(e){ onError('Sichern hat nicht geklappt: ' + (e.message || e)); }
+    finally{ setSaving(false); }
+  }
   if(editing){
     return <SongEditor song={song} onCancel={()=>setEditing(false)} onDelete={onDeleteSong}
       onSave={async s=>{ const ok = await onSaveSong(s); if(ok) setEditing(false); return ok; }} />;
@@ -2733,8 +2806,9 @@ function SongView({song, collection, tagActions, myLists, onSaveSong, onDeleteSo
             hasVoices && {label: practice ? '♫ Stimmen üben schliessen' : '♫ Stimmen üben', onClick: ()=>setPractice(!practice)},
             {label: '✎ Bearbeiten', onClick: ()=>setEditing(true)},
             {label: '📤 Weitergeben', onClick: ()=>onShare({name: song.title, songs: [song], lists: []})},
-            {label: '💾 Als Dateien sichern (Text' + (hasScores ? ', PDF' : '') + (hasVoices ? ', MIDI' : '') + ')',
-              onClick: ()=>saveSongFiles(song).catch(e=>onError('Sichern hat nicht geklappt: ' + (e.message || e)))}
+            {label: '💾 Als Dateien sichern (Text' + (song.scores && song.scores.length ? ', PDF' : '')
+                + (hasMxl ? ', Noten-PDF' + (notesKeyLabel ? ' in ' + notesKeyLabel : '') : '') + (hasVoices ? ', MIDI' : '') + ')',
+              onClick: saveFiles}
           ]} />
         </React.Fragment>} />
       <div className="main" style={{'--lyrics-scale': FONT_SCALES[fontIndex]}}>
@@ -2774,6 +2848,13 @@ function SongView({song, collection, tagActions, myLists, onSaveSong, onDeleteSo
         {song.updated && <div className="text-stamp">Textstand {formatStamp(song.updated)}</div>}
       </div>
       {showScores && <ScoreViewer scores={song.scores} title={song.title} onClose={()=>setShowScores(false)} />}
+      {saving && <div className="overlay"><div className="dialog"><p style={{margin:0}}>Dateien werden vorbereitet{hasMxl ? ' – die Noten werden gezeichnet' : ''} …</p></div></div>}
+      {shareRetry && <Confirm title="Dateien sind bereit"
+        message="Das Vorbereiten hat etwas gedauert. Tippe auf „Teilen“, um die Dateien zu sichern oder zu senden."
+        confirmLabel="Teilen"
+        onConfirm={()=>{ const f = shareRetry; setShareRetry(null);
+          shareFiles(f, song.title).catch(e=>onError('Sichern hat nicht geklappt: ' + (e.message || e))); }}
+        onCancel={()=>setShareRetry(null)} />}
       {showTags && <TagChooser collection={collection} song={song}
         onToggle={tagId=>tagActions.toggle(song.id, tagId)}
         onCreateCategory={tagActions.createCategory} onCreateTag={tagActions.createTag}

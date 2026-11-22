@@ -225,7 +225,13 @@ steht in `lieder-prompt.md`; bei Formatänderungen beide Stellen anpassen.
 - `saveSongFiles` — Liedansicht ⋯ → „Als Dateien sichern“: `name.txt` (Kopf „Titel, Person,
   Jahr“, Link-Zeile, Text – wie in `privat/data`), `name.pdf` (Notenbilder, eigener kleiner
   PDF-Schreiber `scoresToPdf`), `name.mid` (alle Stimmen in einer Format-1-Datei,
-  `voicesToMidi`) über das Teilen-Fenster (AirDrop an den Mac, „In Dateien sichern“)
+  `voicesToMidi`) über das Teilen-Fenster (AirDrop an den Mac, „In Dateien sichern“); bei `musicxml`
+  zusätzlich `name-noten-<tonart>.pdf`: die gezeichnete Partitur wie in der Liedansicht (gewählte
+  Tonart über `transposeXml`, ausgeblendete Stimmen weg) – `musicXmlToPdf` zeichnet sie unsichtbar mit
+  OSMD (`pageFormat: 'A4_P'`, Titel „Lied (Tonart)“ als `movement-title`), SVG-Seiten → JPEG →
+  `scoresToPdf`. Braucht OSMD (beim ersten Mal Internet). Verweigert iOS das Teilen, weil das
+  Zeichnen zu lange dauerte (`NotAllowedError`), gibt `shareFiles` `{retry}` zurück und `SongView`
+  zeigt „Dateien sind bereit“ mit Knopf „Teilen“.
 - `ShareChooser` / `shareSongs` — ⋯ → „Lieder weitergeben“ auf der Startseite (Alle Lieder, Favoriten, eine Liste)
   und „📤 Weitergeben“ im Lied: baut eine Import-Datei (ohne `edited`) und öffnet
   `navigator.share`; ohne Teilen-Funktion Download. `mergeCollection` beim Import
