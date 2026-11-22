@@ -327,7 +327,7 @@ function applyTheme(mode){
 }
 // Bei jeder Änderung an der App auf das aktuelle Datum setzen (wird auf der Startseite angezeigt);
 // mehrere Änderungen am selben Tag: -2, -3, … anhängen
-const APP_VERSION = '2026-11-22';
+const APP_VERSION = '2026-11-22-2';
 
 const FONT_SCALES = [0.85, 1, 1.15, 1.3, 1.5, 1.75, 2];
 const DEFAULT_FONT_INDEX = 1;
@@ -1143,6 +1143,23 @@ function Header({title, onBack, right}){
 // ---------------------------------------------------------------- Tags
 // collection.tagCategories = [{id, name}], collection.tags = [{id, name, categoryId}],
 // song.tags = [Tag-id]. Tags reisen mit der Lieder-Datei mit und werden beim Import vereinigt.
+// Vorgegebene Tags: werden auf jedem Gerät einmal angelegt (Merker LS_TAG_SEED), danach frei
+// änderbar und löschbar. Neue Vorgaben: Eintrag ergänzen und TAG_SEED_VERSION hochzählen.
+const LS_TAG_SEED = 'lyrics-tags-vorgaben';
+const TAG_SEED_VERSION = 1;
+const TAG_SEED = [{category: 'Genre', tags: ['Worship', 'Taizé', 'Kirchengesangbuch', 'Traditionell']}];
+function seedTags(coll){
+  const cats = [...tagCats(coll)], tags = [...tagList(coll)];
+  TAG_SEED.forEach(g=>{
+    let cat = cats.find(c=>c.name.toLowerCase()===g.category.toLowerCase());
+    if(!cat){ cat = {id: uniqueId('kat-' + slugify(g.category), new Set(cats.map(c=>c.id))), name: g.category}; cats.push(cat); }
+    g.tags.forEach(name=>{
+      if(tags.some(t=>t.categoryId===cat.id && t.name.toLowerCase()===name.toLowerCase())) return;
+      tags.push({id: uniqueId('tag-' + slugify(cat.name) + '-' + slugify(name), new Set(tags.map(t=>t.id))), name, categoryId: cat.id});
+    });
+  });
+  return {...coll, tagCategories: cats, tags};
+}
 function tagCats(coll){ return (coll && coll.tagCategories) || []; }
 function tagList(coll){ return (coll && coll.tags) || []; }
 function byName(a, b){ return a.name.localeCompare(b.name, 'de'); }
@@ -2948,6 +2965,13 @@ function BugReporter(){
 function App(){
   const [collection,setCollection] = useState(undefined);   // undefined = wird noch geladen
   const collRef = useRef(collection); collRef.current = collection;
+  // Vorgegebene Tags einmal pro Gerät anlegen, sobald es eine Sammlung gibt
+  useEffect(()=>{
+    if(!collection || loadJSON(LS_TAG_SEED, 0) >= TAG_SEED_VERSION) return;
+    commit(seedTags(collection), 'Die vorgegebenen Tags konnten nicht angelegt werden.').then(ok=>{
+      if(ok) try{ localStorage.setItem(LS_TAG_SEED, JSON.stringify(TAG_SEED_VERSION)); }catch(e){}
+    });
+  },[collection]);
   const [myLists,setMyLists] = useState(()=>loadJSON(LS_MY_LISTS, []));
   const [favorites,setFavorites] = useState(()=>{
     const f = loadJSON(LS_FAVORITES, []);

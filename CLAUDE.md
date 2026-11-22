@@ -52,6 +52,10 @@ Tags stehen in der Statuszeile. Taggen ändert weder `edited` noch `updated`. Ta
 Lieder-Datei (`shareSongs` gibt nur die benutzten Tags samt Kategorien mit); beim Import werden
 Tags je Lied vereinigt (auch wenn die Gerätefassung bleibt), Definitionen nach id ergänzt,
 vorhandene (evtl. umbenannte) bleiben. Tag-Funktionen bauen auf `collRef.current` auf.
+**Vorgegebene Tags** (`TAG_SEED`): Kategorie „Genre“ mit Worship, Taizé, Kirchengesangbuch,
+Traditionell. `seedTags` legt sie auf jedem Gerät einmal an (sobald es eine Sammlung gibt,
+fehlende nach Name), Merker `localStorage` `lyrics-tags-vorgaben` = `TAG_SEED_VERSION`; danach
+frei änderbar/löschbar. Neue Vorgaben: `TAG_SEED` ergänzen und `TAG_SEED_VERSION` hochzählen.
 
 Erlaubt sind **eigene Listen** der Familienmitglieder: Sie verweisen nur per Lied-id
 auf vorhandene Lieder (keine Texte), liegen nur auf dem jeweiligen Gerät und bleiben
